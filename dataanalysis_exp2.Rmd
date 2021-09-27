@@ -1,0 +1,564 @@
+---
+title: "Analyses of main data: Experiment 2"
+author: "Andrew Perfors"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+
+# load the full datasets
+de2 <- read.csv(file=here("datafiles/exp2_good_data.csv")) %>% as_tibble()
+de2$pID <- as.factor(de2$pID)
+de2$condition <- as.factor(de2$condition)
+levels(de2$condition) <- c("Pᴇᴀᴋᴇᴅ", "Uɴɪғᴏʀᴍ")
+de2peak <- de2 %>% filter(condition=="Pᴇᴀᴋᴇᴅ")
+de2unif <- de2 %>% filter(condition=="Uɴɪғᴏʀᴍ")
+
+# load the fitted data
+de2p_fitall <- read.csv(file=here("datafiles/exp2_peaked_allfits_adj.csv")) %>%
+  as_tibble()
+de2p_fittwo <- read.csv(file=here("datafiles/exp2_peaked_twofits_adj.csv")) %>%
+  as_tibble()
+de2p_fitbeta <- read.csv(file=here("datafiles/exp2_peaked_betafits_adj.csv")) %>%
+  as_tibble()
+de2p_fitgamma <- read.csv(file=here("datafiles/exp2_peaked_gammafits_adj.csv")) %>%
+  as_tibble()
+de2u_fitall <- read.csv(file=here("datafiles/exp2_uniform_allfits_adj.csv")) %>%
+  as_tibble()
+de2u_fittwo <- read.csv(file=here("datafiles/exp2_uniform_twofits_adj.csv")) %>%
+  as_tibble()
+
+# convert "value" to mean squared error
+de2p_fitall$value <- de2p_fitall$value/11
+de2p_fitbeta$value <- de2p_fitbeta$value/11
+de2p_fittwo$value <- de2p_fittwo$value/11
+de2p_fitgamma$value <- de2p_fitgamma$value/11
+de2u_fitall$value <- de2u_fitall$value/11
+de2u_fittwo$value <- de2u_fittwo$value/11
+
+# rename
+de2p_fitall$condition <- as.factor(de2p_fitall$condition)
+levels(de2p_fitall$condition) <- c("Pᴇᴀᴋᴇᴅ")
+de2p_fitbeta$condition <- as.factor(de2p_fitbeta$condition)
+levels(de2p_fitbeta$condition) <- c("Pᴇᴀᴋᴇᴅ")
+de2p_fittwo$condition <- as.factor(de2p_fittwo$condition)
+levels(de2p_fittwo$condition) <- c("Pᴇᴀᴋᴇᴅ")
+de2p_fitgamma$condition <- as.factor(de2p_fitgamma$condition)
+levels(de2p_fitgamma$condition) <- c("Pᴇᴀᴋᴇᴅ")
+
+de2u_fitall$condition <- as.factor(de2u_fitall$condition)
+levels(de2u_fitall$condition) <- c("Uɴɪғᴏʀᴍ")
+de2u_fittwo$condition <- as.factor(de2u_fittwo$condition)
+levels(de2u_fittwo$condition) <- c("Uɴɪғᴏʀᴍ")
+
+# combine files
+de2u_fitall$beta <- NA
+de2_fitall <- rbind(de2p_fitall,de2u_fitall)
+de2u_fittwo$beta <- NA
+de2_fittwo <- rbind(de2p_fittwo,de2u_fittwo)
+
+N <- length(unique(de2$pID))
+Np <- length(unique(de2peak$pID))
+Nu <- length(unique(de2unif$pID))
+```
+
+## Basic performance
+
+First let's have a look at the **peaked** and **uniform** conditions, which had different priors but each saw four red and one blue. 
+
+```{r exp2_posteriors, echo=FALSE,fig.height=3, fig.width=8}
+# make longer form
+de2peak_long <- de2peak %>% 
+  select(-c(condition,age,gender,botCheck,actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="px",values_to="py")
+de2peak_long$px <- as.numeric(str_sub(de2peak_long$px,2,10))/100
+
+# make summary dataset for graphing
+de2peak_lsum <- de2peak_long %>%
+  group_by(px) %>%
+  summarise(mean=mean(py),
+            sd=sd(py),
+            n=n(),
+            sderr = sd/sqrt(n)) %>%
+  ungroup()
+
+peakpost <- de2peak_lsum %>%
+  ggplot(mapping=aes(x=px,y=mean)) +
+  geom_jitter(data=de2peak_long,mapping=aes(x=px,y=py),
+              alpha=0.1,colour="darkgreen") +
+  geom_line(colour="darkgreen") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkgreen") +
+  theme_bw() +
+  labs(title = "Pᴇᴀᴋᴇᴅ",x="Proportion of red",y="Probability")
+
+# make longer form
+de2unif_long <- de2unif %>% 
+  select(-c(condition,age,gender,botCheck,actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="ux",values_to="uy")
+de2unif_long$ux <- as.numeric(str_sub(de2unif_long$ux,2,10))/100
+
+# make summary dataset for graphing
+de2unif_lsum <- de2unif_long %>%
+  group_by(ux) %>%
+  summarise(mean=mean(uy),
+            sd=sd(uy),
+            n=n(),
+            sderr = sd/sqrt(n)) %>%
+  ungroup()
+
+unifpost <- de2unif_lsum %>%
+  ggplot(mapping=aes(x=ux,y=mean)) +
+  geom_jitter(data=de2unif_long,mapping=aes(x=ux,y=uy),
+              alpha=0.1,colour="green3") +
+  geom_line(colour="green3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="green3") +
+  theme_bw() +
+  labs(title = "Uɴɪғᴏʀᴍ",x="Proportion of red",y="Probability")
+
+p <- grid.arrange(peakpost,unifpost,ncol=2)
+ggsave("figures/exp2_posteriors_peak_unif_adj.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+
+```
+
+# FITS
+
+### Looking at fitted values: $\beta$, $\delta$, and $\gamma$
+
+Let's have a look at the distribution of parameters. As a reminder:
+
+$\beta$: determines to what degree participants use their stated prior, and to what degree they use the uniform distribution to deduce their posterior. If $\beta=1$ that means it's all prior, if $\beta=0$ it is all uniform distribution
+
+$\gamma$: how much they weighted the red chips they saw. if $\gamma=1$ it is veridical, lower is underweighting, higher is overweighting. 
+
+$\delta$: how much they weighted the blue chips they saw. if $\delta=1$ it is veridical, lower is underweighting, higher is overweighting. 
+
+Note that there is no $\beta$ parameter in the uniform condition, since the given prior is already uniform. So all the things with three parameters don't include it.
+
+```{r viewdatascatall, echo=FALSE, fig.height=6, fig.width=4}
+psbg <- de2p_fitall %>%
+  ggplot(mapping=aes(x=beta,y=gamma,colour=delta)) +
+  geom_point(alpha=0.7,size=2) + 
+  theme_bw() +
+  labs(title = "\u03b2 vs \u03b3",x="\u03b2",y="\u03b3")
+
+psbd <- de2p_fitall %>%
+  ggplot(mapping=aes(x=beta,y=delta,colour=gamma)) +
+  geom_point(alpha=0.7,size=2) + 
+  theme_bw() +
+  labs(title = "\u03b2 vs \u03b4",x="\u03b2",y="\u03b4")
+
+psgd <- de2p_fitall %>%
+  ggplot(mapping=aes(x=gamma,y=delta,colour=beta)) +
+  geom_point(alpha=0.7,size=2) + 
+  theme_bw() +
+  labs(title = "\u03b3 vs \u03b4",x="\u03b3",y="\u03b4")
+
+grid.arrange(psbg,psbd,psgd,nrow=3)
+```
+
+And also a 3D plot
+
+```{r viewdata3dall, echo=FALSE, fig.height=4, fig.width=4}
+p <- plot_ly(x=de2p_fitall$beta, y=de2p_fitall$gamma, z=de2p_fitall$delta,
+             type="scatter3d",mode="markers", color=de2p_fitall$beta)
+p <- layout(p, scene = list(xaxis = list(title="\u03b2"),
+                            yaxis = list(title = "\u03b3"),
+                            zaxis = list(title="\u03b4")))
+p
+```
+
+Finally, let's look at histograms of all of the variables.
+
+```{r histallfits, echo=FALSE, fig.height=6, fig.width=4}
+pb <- de2_fitall %>%
+  ggplot(mapping=aes(x=beta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b2",x="\u03b2",y="# of people")
+
+pg <- de2_fitall %>%
+  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b3",x="\u03b3",y="# of people")
+
+pd <- de2_fitall %>%
+  ggplot(mapping=aes(x=delta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b4",x="\u03b4",y="# of people")
+
+p <- grid.arrange(pb,pg,pd,ncol=3)
+ggsave("figures/exp2_beta_gamma_delta_histograms_adj.png",
+       plot=p,device="png",
+       width=24,height=10, units="cm")
+```
+
+### Looking at fitted values: $\beta$ alone
+
+I wanted to see if the beta values would be different if we weren't also fitting $\delta$ and $\gamma$. So let's look at that histogram.
+
+```{r histbetafits, echo=FALSE, fig.height=3, fig.width=4}
+pbeta <- de2p_fitbeta %>%
+  ggplot(mapping=aes(x=beta)) +
+  geom_histogram(alpha=0.7,fill="darkgreen",colour="black",binwidth=0.1) + 
+  theme_bw() +
+  labs(title = "Distribution of \u03b2 only",x="\u03b2",y="# of people")
+
+pbeta
+ggsave("figures/exp2_beta_histograms_adj.png",plot=pbeta,device="png",
+       width=8,height=5, units="cm")
+
+# percent less than 0.1
+pl1p <- round(100*sum(de2p_fitbeta$beta<0.1)/Np,1)
+# percent greater than 0.9
+pg1p <- round(100*sum(de2p_fitbeta$beta>0.9)/Np,1)
+```
+
+For the priors: `r pl1p`% had $\beta$ less than 0.1, and `r pg1p`% had $\beta$ greater than 0.9. 
+
+### Looking at fitted values: $\gamma$ alone
+
+I wanted to see if the gamma values would be different if we weren't also fitting $\beta$ and $\delta$. So let's look at that histogram.
+
+```{r histgammafits, echo=FALSE, fig.height=3, fig.width=4}
+pgamma <- de2p_fitgamma %>%
+  ggplot(mapping=aes(x=gamma)) +
+  geom_histogram(alpha=0.7,fill="darkgreen",colour="black",binwidth=1) + 
+  theme_bw() +
+  labs(title = "Distribution of \u03b3 only",x="\u03b3",y="# of people")
+
+pgamma
+ggsave("figures/exp2_gamma_histograms_adj.png",plot=pgamma,device="png",
+       width=8,height=5, units="cm")
+
+p <- grid.arrange(pbeta,pgamma,ncol=2)
+ggsave("figures/exp2_combined_histograms_adj.png",plot=p,device="png",
+       width=16,height=5, units="cm")
+
+# percent less than 0.1
+pl1p <- round(100*sum(de2p_fitgamma$gamma<1)/Np,1)
+```
+
+For the likelihoods: `r pl1p`% in PEAKED had $\gamma$ less than 1 (no need to run UNIFORM, as that would be the same as the $\gamma$ distribution below).
+
+
+### Looking at fitted values: $\beta$ and $\gamma$ alone
+
+Here we assume one parameter (call it $\gamma$) instead of two separate ones ($\gamma$ and $\delta$). i.e. this forces them to be the same and can be thought of as a conservatism parameter. I wanted to look at this because I think it might be a lot more interpretable than having both.
+
+$\beta$: determines to what degree participants use their stated prior, and to what degree they use the uniform distribution to deduce their posterior. If $\beta=1$ that means it's all prior, if $\beta=0$ it is all uniform distribution
+
+$\gamma$: how much they weighted the chips they saw. if $\gamma=1$ it is veridical, lower is underweighting, higher is overweighting. 
+
+```{r viewdatascattwo, echo=FALSE, fig.height=3, fig.width=4}
+p <- de2p_fittwo %>%
+  ggplot(mapping=aes(x=beta,y=gamma)) +
+  geom_point(alpha=0.6,size=3,colour="darkgreen") + 
+  theme_bw() +
+  labs(title = "\u03b2 vs \u03b3",x="\u03b2",y="\u03b3")
+
+p
+ggsave("figures/exp2_beta_gamma_fitted_values_adj.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+```
+
+Let's calculate the Spearman correlation:
+
+```{r correlationbetagamma}
+cor.test(de2p_fittwo$beta,de2p_fittwo$gamma,method="spearman")
+```
+
+And a histogram of them too
+
+```{r histtwofits, echo=FALSE, fig.height=4, fig.width=8}
+pb <- de2_fittwo %>%
+  ggplot(mapping=aes(x=beta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b2",x="\u03b2",y="# of people")
+
+pg <- de2_fittwo %>%
+  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b3",x="\u03b3",y="# of people")
+
+p <- grid.arrange(pb,pg,ncol=2)
+ggsave("figures/exp2_beta_gamma_histograms_adj.png",plot=p,device="png",
+       width=16,height=10, units="cm")
+
+# percent less than 0.1
+pl1p <- round(100*sum(de2p_fittwo$beta<0.1)/Np,1)
+# percent greater than 0.9
+pg1p <- round(100*sum(de2p_fittwo$beta>0.9)/Np,1)
+
+# likelihood percent less than 1
+pll1f <- round(100*sum(de2p_fittwo$gamma<1)/Np,1)
+pll1u <- round(100*sum(de2u_fittwo$gamma<1)/Nu,1)
+
+```
+
+For the priors: `r pl1p`% had $\beta$ less than 0.1, and `r pg1p`% had $\beta$ greater than 0.9. 
+
+For the likelihoods: `r pll1f`% in PEAKED and `r pll1u`% in UNIFORM had $\gamma$ less than 1 (i.e., were conservative).
+
+
+# Individuals: Peaked prior
+
+So now let's look at individuals - look at their posterior, based on the best-fit beta and gamma. 
+
+*red line*: the given prior
+
+*dark green line*: their reported posterior
+
+*dotted grey*: Bayes rule prediction assuming uniform prior (not shown)
+
+*solid grey*: Bayes rule prediction assuming the given prior
+
+*dotted black*: line based on best-fit beta and gamma
+
+```{r individual_people_betagamma, echo=FALSE, fig.height=40}
+pry <- c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0)
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+de2peak_long$pry <- rep(pry,nrow(de2peak_long)/11)
+
+ptps <- de2p_fittwo %>% select(pID,beta,gamma,value)
+de2peak_fittwo <- merge(de2peak_long,ptps) 
+
+de2peak_fittwo_sum <- de2peak_fittwo %>%
+  group_by(pID) %>%
+  mutate(prpy = pry*(px^4)*(1-px)) %>%
+  mutate(ppy = prpy/sum(prpy)) %>%
+  mutate(prpybest = (beta*pry+(1-beta)*rep(1/11,11))*
+           (px^(gamma*4))*(1-x)^gamma) %>%
+  mutate(ppyb = prpybest/sum(prpybest)) %>%
+  mutate(ply = px^4*(1-px)) %>%
+  mutate(ly = ply/sum(ply)) %>%
+  ungroup() %>%
+  select(pID,px,py,pry,ly,ppy,ppyb,beta,gamma,value) %>%
+  mutate(name = paste0("\u03b2=",round(beta,digits=2),
+                       ", \u03b3=",round(gamma,digits=2),
+                       "\n MSE=",round(value,digits=4),
+                       " [",pID,"]"))
+
+p <- de2peak_fittwo_sum %>%
+  ggplot(mapping=aes(x=px, y=pry)) +
+  #geom_line(mapping=aes(x=px,y=ly),linetype="dotted",colour="gray") +
+  geom_line(mapping=aes(x=px,y=ppy),linetype="solid",colour="gray") +
+  geom_line(mapping=aes(x=px,y=ppyb),linetype="dotted",
+           colour="black") +
+  geom_line(colour="darkred") + 
+  #geom_line(mapping=aes(x=x,y=fy),colour="green3") +
+  geom_line(mapping=aes(x=px,y=py),colour="darkgreen") +
+  theme_bw() +
+  facet_wrap(~name,ncol=8) +
+  labs(title = "Individual fits, Pᴇᴀᴋᴇᴅ: \u03b2 and \u03b3")
+
+ggsave("figures/exp2_beta_gamma_indiv_fits_peaked_adj.png",plot=p,device="png",
+       width=40,height=50, units="cm")
+
+# look at the correlations between predicted and reported posteriors
+de2predspeak <- de2peak_fittwo_sum %>% 
+  group_by(pID) %>% 
+  summarise(r = cor.test(ppy,ppyb)$estimate[[1]], 
+            p = cor.test(ppy,ppyb)$p.value[[1]]) %>%
+  ungroup()
+```
+
+# Individuals: Uniform prior
+
+So now let's look at individuals - look at their posterior, based on the best-fit beta and gamma. 
+
+*red line*: the given prior
+
+*light green line*: their reported posterior
+
+*solid grey*: Bayes rule prediction assuming uniform prior
+
+*dotted black*: line based on best-fit beta and gamma
+
+```{r individual_people_betagamma_unif, echo=FALSE, fig.height=40}
+pry <- rep(1/11,11)
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+de2unif_long$pry <- rep(pry,nrow(de2unif_long)/11)
+
+utps <- de2u_fittwo %>% select(pID,gamma,value)
+de2unif_fittwo <- merge(de2unif_long,utps) 
+
+de2unif_fittwo_sum <- de2unif_fittwo %>%
+  group_by(pID) %>%
+  mutate(prpy = pry*(ux^4)*(1-ux)) %>%
+  mutate(ppy = prpy/sum(prpy)) %>%
+  mutate(prpybest = pry*(ux^(gamma*4))*(1-ux)^gamma) %>%
+  mutate(ppyb = prpybest/sum(prpybest)) %>%
+  mutate(ply = ux^4*(1-ux)) %>%
+  mutate(ly = ply/sum(ply)) %>%
+  ungroup() %>%
+  select(pID,ux,uy,pry,ly,ppy,ppyb,gamma,value) %>%
+    mutate(name = paste0("\u03b3=",round(gamma,digits=2),
+                       "\n MSE=",round(value,digits=4),
+                       " [",pID,"]"))
+
+p <- de2unif_fittwo_sum %>%
+  ggplot(mapping=aes(x=ux, y=pry)) +
+  #geom_line(mapping=aes(x=ux,y=ly),linetype="dotted",colour="gray") +
+  geom_line(mapping=aes(x=ux,y=ppy),linetype="solid",colour="gray") +
+  geom_line(mapping=aes(x=ux,y=ppyb),linetype="dotted",
+           colour="black") +
+  geom_line(colour="darkred") + 
+  geom_line(mapping=aes(x=ux,y=uy),colour="green3") +
+  theme_bw() +
+  facet_wrap(~name,ncol=8) +
+  labs(title = "Individual fits, Uɴɪғᴏʀᴍ: \u03b2 and \u03b3")
+
+ggsave("figures/exp2_beta_gamma_indiv_fits_uniform_adj.png",plot=p,device="png",
+       width=40,height=50, units="cm")
+
+# look at the correlations between predicted and reported posteriors
+de2predsunif <- de2unif_fittwo_sum  %>% 
+  group_by(pID) %>% 
+  summarise(r = cor.test(ppy,ppyb)$estimate[[1]], 
+            p = cor.test(ppy,ppyb)$p.value[[1]]) %>%
+  ungroup()
+
+de2predspeak$condition <- "Pᴇᴀᴋᴇᴅ"
+de2predsunif$condition <- "Uɴɪғᴏʀᴍ"
+de2preds <- rbind(de2predspeak,de2predsunif)
+```
+
+We can also get a sense of how good the fits were.
+
+```{r goodnessfitsbetagamma, echo=FALSE, fig.height=10}
+prmse <- de2_fittwo %>%
+  ggplot(mapping=aes(x=value,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.005,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "MSE (\u03b2 and \u03b3)",
+       x="MSE",y="# of people")
+
+pcorr <- de2preds %>%
+  ggplot(mapping=aes(x=r,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.05,show.legend=FALSE) + 
+  scale_fill_manual(values = c("darkgreen", "green3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Correlation (\u03b2 and \u03b3)",
+       x="r",y="# of people")
+
+p <- grid.arrange(prmse,pcorr,ncol=2)
+
+p
+
+ggsave("figures/exp2_beta_gamma_fits_adj.png",plot=p,device="png",
+       width=15,height=10, units="cm")
+
+```
+
+# Aggregate fits
+
+We can also look at the parameter values for the aggregate fits. 
+
+```{r aggregatefits_peaked, echo=FALSE, fig.height=3}
+dagg <- read.csv(file=here("datafiles/exp2all_aggregate_fits_adj.csv")) %>% as_tibble()
+dagg_un <- dagg %>% filter(condition=="uniform")
+dagg_p <- dagg %>% filter(condition=="peaked")
+
+# prediction assuming uniform prior
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+pp <- x^4*(1-x)
+py <- pp/sum(pp)
+
+# prediction assuming peaked prior
+pry <- c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0)
+prpy <- (pry)*x^4*(1-x)
+ppy <- prpy/sum(prpy)
+
+# prediction assuming best fits, peaked
+beta <- dagg_p$beta[dagg_p$fitted=="two"]
+gamma <- dagg_p$gamma[dagg_p$fitted=="two"]
+delta <- gamma
+prpybest <- (beta*pry+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb,pry)
+
+t <- paste0("Pᴇᴀᴋᴇᴅ: \u03b2=",round(beta,digits=2),
+  ", \u03b3=",round(gamma,digits=2))
+
+ppeaked_all<- de2peak_lsum %>%
+  ggplot(mapping=aes(x=px,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  ylim(0,1) +
+  geom_line(colour="darkgreen") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkgreen") +
+  geom_line(data=d,mapping=aes(x=x,y=pry),
+            colour="darkred") + 
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits, uniform
+pry <- rep(1/11,11)
+beta <- 1
+gamma <- dagg_un$gamma[dagg_un$fitted=="two"]
+delta <- gamma
+prpybest <- (beta*pry)*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppyb,pry)
+
+t <- paste0("Uɴɪғᴏʀᴍ: \u03b3=",round(gamma,digits=2))
+
+puniform_all<- de2unif_lsum %>%
+  ggplot(mapping=aes(x=ux,y=mean)) +
+  geom_line(data=d,mapping=aes(x=x,y=py),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  ylim(0,1) +
+  geom_line(colour="green3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="green3") +
+  geom_line(data=d,mapping=aes(x=x,y=pry),
+            colour="darkred") + 
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+p <- grid.arrange(ppeaked_all,puniform_all,ncol=2)
+
+ggsave("figures/exp2_beta_gamma_aggregate_fits_adj.png",plot=p,device="png",
+       width=16,height=8, units="cm")
+```

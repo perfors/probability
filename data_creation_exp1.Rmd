@@ -1,0 +1,592 @@
+---
+title: "Creation of data files for analysis"
+author: "Andrew Perfors"
+output: html_document
+---
+
+This creates the data files we'll need for subsequent analyses.
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(rminer)
+
+# load the full datasets
+de1raw <- read.csv(file=here("Experiment1_Andy.csv")) %>% as_tibble()
+# remove people who failed the bot check
+bad <- de1raw %>% filter(botCheck==0 | actuallyEstimated==0)
+badpeople <- bad$pID
+de1 <- de1raw %>% filter(!(pID %in% badpeople))
+bad <- de1raw %>% filter(pID %in% badpeople)
+de1$pID <- as.factor(de1$pID)
+
+# write the two main datasets
+write.csv(bad,"datafiles/exp1_bad_data.csv")
+write.csv(de1,"datafiles/exp1_good_data.csv")
+
+
+# split by condition
+de1five <- de1 %>% filter(condition=="five")
+de1un <- de1 %>% filter(condition=="unlimited") %>% 
+  mutate(selected = seenRed+seenBlue)
+de1all <- de1 %>% filter(condition=="all") %>% 
+  mutate(selected = seenRed+seenBlue)
+write.csv(de1five,"datafiles/exp1_five_data.csv")
+write.csv(de1un,"datafiles/exp1_un_data.csv")
+write.csv(de1all,"datafiles/exp1_all_data.csv")
+
+# make the priors all nonzero
+de1aprior_long <- de1all %>%
+  filter(section=="prior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de1aprior_long$x <- as.numeric(str_sub(de1aprior_long$x,2,10))/100
+
+de1aprior_long_adj <- de1aprior_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de1aprior_adj <- de1aprior_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de1aprior_old <- de1all %>% filter(section=="prior")
+de1aprior_old <- de1aprior_old %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de1aprior_new <- merge(de1aprior_old,de1aprior_adj) %>%
+  select(pID,condition,section,seenRed,seenBlue,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,time,
+         chipsOrder,actuallyEstimated,selected)
+
+de1all_adj <- de1all %>% filter(section!="prior") 
+de1all_adj <- rbind(de1all_adj,de1aprior_new)
+
+# make the five all nonzero
+de1afive_long <- de1all_adj %>%
+  filter(section=="five") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de1afive_long$x <- as.numeric(str_sub(de1afive_long$x,2,10))/100
+
+de1afive_long_adj <- de1afive_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de1afive_adj <- de1afive_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de1afive_old <- de1all_adj %>% filter(section=="five")
+de1afive_old <- de1afive_old %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de1afive_new <- merge(de1afive_old,de1afive_adj) %>%
+  select(pID,condition,section,seenRed,seenBlue,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,time,
+         chipsOrder,actuallyEstimated,selected)
+
+de1all_adj <- de1all_adj %>% filter(section!="five") 
+de1all_adj <- rbind(de1all_adj,de1afive_new)
+
+# make the unlimited all nonzero
+de1aun_long <- de1all_adj %>%
+  filter(section=="unlimited") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de1aun_long$x <- as.numeric(str_sub(de1aun_long$x,2,10))/100
+
+de1aun_long_adj <- de1aun_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de1aun_adj <- de1aun_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de1aun_old <- de1all_adj %>% filter(section=="unlimited")
+de1aun_old <- de1aun_old %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de1aun_new <- merge(de1aun_old,de1aun_adj) %>%
+  select(pID,condition,section,seenRed,seenBlue,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,time,
+         chipsOrder,actuallyEstimated,selected)
+
+de1all_adj <- de1all_adj %>% filter(section!="unlimited") 
+de1all_adj <- rbind(de1all_adj,de1aun_new)
+
+write.csv(de1all_adj,"datafiles/exp1_all_data_adj.csv")
+
+```
+
+
+## Condition 3 (ALL)
+
+This contains the code to fit individuals in four different ways. 
+
+1. Fit $\beta$, $\gamma$, and $\delta$. Output is in `exp1all_five_allfits.csv`
+
+2. Fit beta and one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp1all_five_twofits.csv`
+
+3. Fit only $\beta$, and force $\gamma=\delta=1$. The point of this is to see if the fits we get on $\beta$ which imply they are ignoring the prior are an artefact of also fitting $\delta$ and $\gamma$. Output is in `exp1all_five_betafits.csv`
+
+4. Fit only $\gamma$, and assume that $\beta=1$. The point of this is the opposite of #3. Output is in `exp1all_five_gammafits_adj.csv`
+
+```{r fitthingsfive}
+# uncomment this to make it do it on the adjusted dataset
+de1all <- de1all_adj
+
+de1all_long <- de1all %>% 
+  select(-c(condition,age,gender,botCheck,time,chipsOrder,
+            actuallyEstimated,selected)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="y")
+de1all_long$x <- as.numeric(str_sub(de1all_long$x,2,10))/100
+
+# the function that fits beta, gamma, and delta
+frfiveall <- function(ps,d) {
+  dfive <- d %>% filter(section=="five")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   delta <- ps[3]
+   x <- dfive$x
+   y <- dfive$y
+   pry <- dprior$y
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(delta*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits beta and gamma/delta as one
+frfivetwo <- function(ps,d) {
+  dfive <- d %>% filter(section=="five")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   x <- dfive$x
+   y <- dfive$y
+   pry <- dprior$y
+      y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only beta
+frfivebeta <- function(ps,d) {
+  dfive <- d %>% filter(section=="five")
+  dprior <- d %>% filter(section=="prior")
+  gamma <- 1
+   beta <- ps[1]
+   x <- dfive$x
+   y <- dfive$y
+   pry <- dprior$y
+    y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only gamma
+frfivegamma <- function(ps,d) {
+  dfive <- d %>% filter(section=="five")
+  dprior <- d %>% filter(section=="prior")
+   gamma <- ps[1]
+   x <- dfive$x
+   y <- dfive$y
+   pry <- dprior$y
+      y <- y/sum(y)
+   pry <- pry/sum(pry)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- pry
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# fitting delta, gamma, and beta
+ddfiveall <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1,1),frfiveall,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001,0.0000001),
+                          upper=c(0.9999999,50,50))))
+
+de1all_fiveall <- de1all %>% filter(section=="five")
+de1all_fiveall$beta <- NA
+de1all_fiveall$gamma <- NA
+de1all_fiveall$delta <- NA
+de1all_fiveall$value <- NA
+
+for (i in 1:nrow(de1all_fiveall)) {
+  pid <- ddfiveall$pID[i]
+  de1all_fiveall$beta[de1all_fiveall$pID==pid] <-
+    ddfiveall$fit[[i]]$par[1]
+  de1all_fiveall$gamma[de1all_fiveall$pID==pid] <-
+    ddfiveall$fit[[i]]$par[2]
+  de1all_fiveall$delta[de1all_fiveall$pID==pid] <-
+    ddfiveall$fit[[i]]$par[3]
+  de1all_fiveall$value[de1all_fiveall$pID==pid] <-
+    ddfiveall$fit[[i]]$value[1]
+}
+
+write.csv(de1all_fiveall,"datafiles/exp1all_five_allfits_adj.csv")
+
+# fitting delta/gamma, and beta
+ddfivetwo <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frfivetwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+de1all_fivetwo <- de1all %>% filter(section=="five")
+de1all_fivetwo$beta <- NA
+de1all_fivetwo$gamma <- NA
+de1all_fivetwo$value <- NA
+
+for (i in 1:nrow(de1all_fivetwo)) {
+  pid <- ddfivetwo$pID[i]
+  de1all_fivetwo$beta[de1all_fivetwo$pID==pid] <-
+    ddfivetwo$fit[[i]]$par[1]
+  de1all_fivetwo$gamma[de1all_fivetwo$pID==pid] <-
+    ddfivetwo$fit[[i]]$par[2]
+  de1all_fivetwo$value[de1all_fivetwo$pID==pid] <-
+    ddfivetwo$fit[[i]]$value[1]
+}
+
+write.csv(de1all_fivetwo,"datafiles/exp1all_five_twofits_adj.csv")
+
+# fitting only beta
+ddfivebeta <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5),frfivebeta,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(0.9999999))))
+
+de1all_fivebeta <- de1all %>% filter(section=="five")
+de1all_fivebeta$beta <- NA
+de1all_fivebeta$value <- NA
+
+for (i in 1:nrow(de1all_fivebeta)) {
+    pid <- ddfivebeta$pID[i]
+  de1all_fivebeta$beta[de1all_fivebeta$pID==pid] <-
+    ddfivebeta$fit[[i]]$par[1]
+  de1all_fivebeta$value[de1all_fivebeta$pID==pid] <-
+    ddfivebeta$fit[[i]]$value[1]
+}
+
+write.csv(de1all_fivebeta,"datafiles/exp1all_five_betafits_adj.csv")
+
+# fitting only gamma
+ddfivegamma <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),frfivegamma,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+de1all_fivegamma <- de1all %>% filter(section=="five")
+de1all_fivegamma$gamma <- NA
+de1all_fivegamma$value <- NA
+
+for (i in 1:nrow(de1all_fivegamma)) {
+    pid <- ddfivegamma$pID[i]
+  de1all_fivegamma$gamma[de1all_fivegamma$pID==pid] <-
+    ddfivegamma$fit[[i]]$par[1]
+  de1all_fivegamma$value[de1all_fivegamma$pID==pid] <-
+    ddfivegamma$fit[[i]]$value[1]
+}
+
+write.csv(de1all_fivegamma,"datafiles/exp1all_five_gammafits_adj.csv")
+
+```
+
+Now we're going to do the same thing with the unlimited data points.
+
+1. Fit $\beta$, $\gamma$, and $\delta$. Output is in `exp1all_un_allfits.csv`
+
+2. Fit beta and one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp1all_un_twofits.csv`
+
+3. Fit only $\beta$, and force $\gamma=\delta=1$. The point of this is to see if the fits we get on $\beta$ which imply they are ignoring the prior are an artefact of also fitting $\delta$ and $\gamma$. Output is in `exp1all_un_betafits.csv`
+
+4. Fit only $\gamma$, and assume that $\beta=1$. The point of this is the opposite of #3. Output is in `exp1all_un_gammafits_adj.csv`
+
+
+```{r fitthingsun}
+
+# the function that fits beta, gamma, and delta
+frunall <- function(ps,d) {
+  dun <- d %>% filter(section=="unlimited")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   delta <- ps[3]
+   x <- dun$x
+   y <- dun$y
+   pry <- dprior$y
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   nr <- dun$seenRed[1]
+   nb <- dun$seenBlue[1]
+   likelihood <- x^(gamma*nr)*(1-x)^(delta*nb)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits beta and gamma/delta as one
+fruntwo <- function(ps,d) {
+  dun <- d %>% filter(section=="unlimited")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   x <- dun$x
+   y <- dun$y
+   pry <- dprior$y
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   nr <- dun$seenRed[1]
+   nb <- dun$seenBlue[1]
+   likelihood <- x^(gamma*nr)*(1-x)^(gamma*nb)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only beta
+frunbeta <- function(ps,d) {
+  dun <- d %>% filter(section=="unlimited")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- 1
+   x <- dun$x
+   y <- dun$y
+   pry <- dprior$y
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   nr <- dun$seenRed[1]
+   nb <- dun$seenBlue[1]
+   likelihood <- x^(gamma*nr)*(1-x)^(gamma*nb)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits onlygamma
+frungamma <- function(ps,d) {
+  dun <- d %>% filter(section=="unlimited")
+  dprior <- d %>% filter(section=="prior")
+   gamma <- ps[1]
+   x <- dun$x
+   y <- dun$y
+   pry <- dprior$y
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   nr <- dun$seenRed[1]
+   nb <- dun$seenBlue[1]
+   likelihood <- x^(gamma*nr)*(1-x)^(gamma*nb)
+   prior <- pry
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# fitting delta, gamma, and beta
+ddunall <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1,1),frunall,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001,0.0000001),
+                          upper=c(0.9999999,50,50))))
+
+de1all_unall <- de1all %>% filter(section=="unlimited")
+de1all_unall$beta <- NA
+de1all_unall$gamma <- NA
+de1all_unall$delta <- NA
+de1all_unall$value <- NA
+
+for (i in 1:nrow(de1all_unall)) {
+  pid <- ddunall$pID[i]
+  de1all_unall$beta[de1all_unall$pID==pid] <-
+    ddunall$fit[[i]]$par[1]
+  de1all_unall$gamma[de1all_unall$pID==pid] <-
+    ddunall$fit[[i]]$par[2]
+  de1all_unall$delta[de1all_unall$pID==pid] <-
+    ddunall$fit[[i]]$par[3]
+  de1all_unall$value[de1all_unall$pID==pid] <-
+    ddunall$fit[[i]]$value[1]
+}
+
+write.csv(de1all_unall,"datafiles/exp1all_un_allfits_adj.csv")
+
+# fitting delta/gamma, and beta
+dduntwo <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1,1),fruntwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+de1all_untwo <- de1all %>% filter(section=="unlimited")
+de1all_untwo$beta <- NA
+de1all_untwo$gamma <- NA
+de1all_untwo$value <- NA
+
+for (i in 1:nrow(de1all_untwo)) {
+  pid <- dduntwo$pID[i]
+  de1all_untwo$beta[de1all_untwo$pID==pid] <-
+    dduntwo$fit[[i]]$par[1]
+  de1all_untwo$gamma[de1all_untwo$pID==pid] <-
+    dduntwo$fit[[i]]$par[2]
+  de1all_untwo$value[de1all_untwo$pID==pid] <-
+    dduntwo$fit[[i]]$value[1]
+}
+
+write.csv(de1all_untwo,"datafiles/exp1all_un_twofits_adj.csv")
+
+# fitting only beta
+ddunbeta <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5),frunbeta,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(0.9999999))))
+
+de1all_unbeta <- de1all %>% filter(section=="unlimited")
+de1all_unbeta$beta <- NA
+de1all_unbeta$value <- NA
+
+for (i in 1:nrow(de1all_unbeta)) {
+  pid <- ddunbeta$pID[i]
+  de1all_unbeta$beta[de1all_unbeta$pID==pid] <-
+    ddunbeta$fit[[i]]$par[1]
+  de1all_unbeta$value[de1all_unbeta$pID==pid] <-
+    ddunbeta$fit[[i]]$value[1]
+}
+
+write.csv(de1all_unbeta,"datafiles/exp1all_un_betafits_adj.csv")
+
+# fitting only gamma
+ddungamma <- de1all_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),frungamma,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+de1all_ungamma <- de1all %>% filter(section=="unlimited")
+de1all_ungamma$gamma <- NA
+de1all_ungamma$value <- NA
+
+for (i in 1:nrow(de1all_ungamma)) {
+  pid <- ddungamma$pID[i]
+  de1all_ungamma$gamma[de1all_ungamma$pID==pid] <-
+    ddungamma$fit[[i]]$par[1]
+  de1all_ungamma$value[de1all_ungamma$pID==pid] <-
+    ddungamma$fit[[i]]$value[1]
+}
+
+write.csv(de1all_ungamma,"datafiles/exp1all_un_gammafits_adj.csv")
+
+```
+
+
+## Calculate aggregate best-fit parameters
+
+This contains the code for the aggregate best fits in different ways. First we'll do it just for the section with five data points (4 red and 1 blue). It does it for all of the four possibilities above. 
+
+```{r fitthingsaggregate}
+# make dataset with aggregate results
+de1a_long <- de1all %>%
+  select(pID,section,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,section),names_to="x",values_to="pry")
+de1a_long$x <- as.numeric(str_sub(de1a_long$x,2,10))/100
+
+de1_lsum <- de1a_long %>%
+  group_by(section,x) %>%
+  summarise(y=mean(pry)) %>%
+  ungroup()
+
+nr <- mean(de1all$seenRed[de1all$section=="unlimited"])
+nb <- mean(de1all$seenBlue[de1all$section=="unlimited"])
+
+section <- c("prior","five","unlimited")
+seenRed <- c(0,4,nr)
+seenBlue <- c(0,1,nb)
+nd <- tibble(section,seenRed,seenBlue)
+
+de1_lsum <- merge(de1_lsum,nd)
+write.csv(de1_lsum,"datafiles/exp1all_aggregate_curves_adj.csv")
+
+# fitting delta, gamma, and beta on unlimited
+ddaggall_un <- optim(c(0.5,1,1),frunall,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001,0.0000001),
+                  upper=c(0.9999999,50,50))
+
+# fitting gamma and beta on unlimited
+ddaggtwo_un <- optim(c(0.5,1),fruntwo,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001),
+                  upper=c(0.9999999,50))
+
+# fitting beta on unlimited
+ddaggbeta_un <- optim(c(0.5),frunbeta,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(0.9999999))
+
+# fitting gamma on unlimited
+ddagggamma_un <- optim(c(1),frungamma,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(50))
+
+# fitting delta, gamma, and beta on five
+ddaggall_five <- optim(c(0.5,1,1),frfiveall,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001,0.0000001),
+                  upper=c(0.9999999,50,50))
+
+# fitting gamma and beta on five
+ddaggtwo_five <- optim(c(0.5,1),frfivetwo,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001),
+                  upper=c(0.9999999,50))
+
+# fitting beta on five
+ddaggbeta_five <- optim(c(0.5),frfivebeta,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(0.9999999))
+
+# fitting gamma on five
+ddagggamma_five <- optim(c(1),frfivegamma,d=de1_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(50))
+
+
+section <- c(rep("unlimited",4),rep("five",4))
+fitted <- c("all","two","beta","gamma","all","two","beta","gamma")
+beta <- c(ddaggall_un$par[1],ddaggtwo_un$par[1],ddaggbeta_un$par[1],NA,
+          ddaggall_five$par[1],ddaggtwo_five$par[1],ddaggbeta_five$par[1],NA)
+gamma <- c(ddaggall_un$par[2],ddaggtwo_un$par[2],NA,ddagggamma_un$par[1],
+          ddaggall_five$par[2],ddaggtwo_five$par[2],NA,ddagggamma_five$par[1])
+delta <- c(ddaggall_un$par[3],NA,NA,NA,ddaggall_five$par[3],NA,NA,NA)
+value <- c(ddaggall_un$value,ddaggtwo_un$value,ddaggbeta_un$value,
+           ddagggamma_un$value,ddaggall_five$value,ddaggtwo_five$value,
+           ddaggbeta_five$value,ddagggamma_five$value)
+dagg <- tibble(section,fitted,beta,gamma,delta,value)
+write.csv(dagg,"datafiles/exp1all_aggregate_fits_adj.csv")
+```

@@ -1,0 +1,1009 @@
+---
+title: "Analyses of main data: Experiment 3, Good"
+author: "Andrew Perfors"
+output: html_document
+---
+
+This contains the participants with good fits only
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(plotly)
+
+# load the full datasets
+de3all <- read.csv(file=here("datafiles/exp3_all_data_adj.csv")) %>% as_tibble()
+de3all$pID <- as.factor(de3all$pID)
+de3all$condition <- as.factor(de3all$condition)
+levels(de3all$condition) <- c("Esᴛɪᴍᴀᴛᴇᴅ", "Gɪᴠᴇɴ")
+
+# load the fitted data
+de3e_fitall <- read.csv(file=here("datafiles/exp3est_allfits_adj.csv")) %>% as_tibble()
+de3e_fittwo <- read.csv(file=here("datafiles/exp3est_twofits_adj.csv")) %>% as_tibble()
+de3e_fitbeta <- read.csv(file=here("datafiles/exp3est_betafits_adj.csv")) %>% as_tibble()
+de3e_fitgamma <- read.csv(file=here("datafiles/exp3est_gammafits_adj.csv")) %>% as_tibble()
+de3g_fitall <- read.csv(file=here("datafiles/exp3given_allfits_adj.csv")) %>% as_tibble()
+de3g_fittwo <- read.csv(file=here("datafiles/exp3given_twofits_adj.csv")) %>% as_tibble()
+de3g_fitbeta <- read.csv(file=here("datafiles/exp3given_betafits_adj.csv")) %>% as_tibble()
+de3g_fitgamma <- read.csv(file=here("datafiles/exp3given_gammafits_adj.csv")) %>% as_tibble()
+
+# convert "value" to mean squared error
+de3e_fitall$value <- de3e_fitall$value/11
+de3e_fitbeta$value <- de3e_fitbeta$value/11
+de3e_fittwo$value <- de3e_fittwo$value/11
+de3e_fitgamma$value <- de3e_fitgamma$value/11
+de3g_fitall$value <- de3g_fitall$value/11
+de3g_fitbeta$value <- de3g_fitbeta$value/11
+de3g_fittwo$value <- de3g_fittwo$value/11
+de3g_fitgamma$value <- de3g_fitgamma$value/11
+
+# rename
+de3g_fitall$condition <- as.factor(de3g_fitall$condition)
+levels(de3g_fitall$condition) <- c("Gɪᴠᴇɴ")
+de3g_fitbeta$condition <- as.factor(de3g_fitbeta$condition)
+levels(de3g_fitbeta$condition) <- c("Gɪᴠᴇɴ")
+de3g_fittwo$condition <- as.factor(de3g_fittwo$condition)
+levels(de3g_fittwo$condition) <- c("Gɪᴠᴇɴ")
+de3g_fitgamma$condition <- as.factor(de3g_fitgamma$condition)
+levels(de3g_fitgamma$condition) <- c("Gɪᴠᴇɴ")
+de3e_fitall$condition <- as.factor(de3e_fitall$condition)
+levels(de3e_fitall$condition) <- c("Esᴛɪᴍᴀᴛᴇᴅ")
+de3e_fitbeta$condition <- as.factor(de3e_fitbeta$condition)
+levels(de3e_fitbeta$condition) <- c("Esᴛɪᴍᴀᴛᴇᴅ")
+de3e_fittwo$condition <- as.factor(de3e_fittwo$condition)
+levels(de3e_fittwo$condition) <- c("Esᴛɪᴍᴀᴛᴇᴅ")
+de3e_fitgamma$condition <- as.factor(de3e_fitgamma$condition)
+levels(de3e_fitgamma$condition) <- c("Esᴛɪᴍᴀᴛᴇᴅ")
+
+# remove people
+thresholdval <- 0.01
+badg <- de3g_fittwo$pID[de3g_fittwo$value>thresholdval]
+bade <- de3e_fittwo$pID[de3e_fittwo$value>thresholdval]
+badfits <- unique(c(badg,bade))
+
+de3all_bad <- de3all %>% filter((pID %in% badfits))
+de3g_fitall_bad <- de3g_fitall %>% filter((pID %in% badfits))
+de3g_fittwo_bad <- de3g_fittwo %>% filter((pID %in% badfits))
+de3g_fitbeta_bad <- de3g_fitbeta %>% filter((pID %in% badfits))
+de3g_fitgamma_bad <- de3g_fitgamma %>% filter((pID %in% badfits))
+de3e_fitall_bad <- de3e_fitall %>% filter((pID %in% badfits))
+de3e_fittwo_bad <- de3e_fittwo %>% filter((pID %in% badfits))
+de3e_fitbeta_bad <- de3e_fitbeta %>% filter((pID %in% badfits))
+de3e_fitgamma_bad <- de3e_fitgamma %>% filter((pID %in% badfits))
+
+de3all <- de3all %>% filter(!(pID %in% badfits))
+de3g_fitall <- de3g_fitall %>% filter(!(pID %in% badfits))
+de3g_fittwo <- de3g_fittwo %>% filter(!(pID %in% badfits))
+de3g_fitbeta <- de3g_fitbeta %>% filter(!(pID %in% badfits))
+de3g_fitgamma <- de3g_fitgamma %>% filter(!(pID %in% badfits))
+de3e_fitall <- de3e_fitall %>% filter(!(pID %in% badfits))
+de3e_fittwo <- de3e_fittwo %>% filter(!(pID %in% badfits))
+de3e_fitbeta <- de3e_fitbeta %>% filter(!(pID %in% badfits))
+de3e_fitgamma <- de3e_fitgamma %>% filter(!(pID %in% badfits))
+
+de3given <- de3all %>% filter(condition=="Gɪᴠᴇɴ")
+de3est <- de3all %>% filter(condition=="Esᴛɪᴍᴀᴛᴇᴅ")
+de3given_bad <- de3all_bad %>% filter(condition=="Gɪᴠᴇɴ")
+de3est_bad <- de3all_bad %>% filter(condition=="Esᴛɪᴍᴀᴛᴇᴅ")
+Ne <- nrow(de3est)/2
+Ng <- nrow(de3given)
+badN <- length(unique(de3all_bad$pID))
+badNe <- length(bade)
+badNg <- length(badg)
+
+# combine datasets
+de3_fitall <- rbind(de3e_fitall,de3g_fitall)
+de3_fitbeta <- rbind(de3e_fitbeta,de3g_fitbeta)
+de3_fittwo <- rbind(de3e_fittwo,de3g_fittwo)
+de3_fitgamma <- rbind(de3e_fitgamma,de3g_fitgamma)
+```
+
+## First, comparing the prior
+
+Our first question is what the estimated prior looked like, and how similar it was in aggregate to the one GIVEN to them. Looks like they are very similar, so yay!
+
+```{r exp3_priors, echo=FALSE,fig.height=3, fig.width=4}
+# make longer form
+de3eprior_long <- de3est %>%
+  filter(section=="prior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de3eprior_long$x <- as.numeric(str_sub(de3eprior_long$x,2,10))/100
+
+de3eprior_long_bad <- de3est_bad %>%
+  filter(section=="prior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de3eprior_long_bad$x <- as.numeric(str_sub(de3eprior_long_bad$x,2,10))/100
+
+# make summary dataset for graphing
+de3eprior_lsum <- de3eprior_long %>%
+  group_by(x) %>%
+  summarise(mean=mean(pry),
+            sd=sd(pry),
+            n=n(),
+            sderr = sd/sqrt(n)) %>%
+  ungroup()
+
+pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+pry <- pry/sum(pry)
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+de3givenprior <- tibble(x,pry)
+
+p <- de3eprior_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  geom_jitter(data=de3eprior_long,mapping=aes(x=x,y=pry),
+              alpha=0.1,colour="darkred") +
+  geom_line(colour="darkred") + 
+  geom_line(data=de3givenprior,mapping=aes(x=x,y=pry),linetype="dashed",
+            colour="black") +
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkred") +
+  theme_bw() +
+  labs(title = "Pʀɪᴏʀ",x="Proportion of red",y="Probability")
+
+p
+ggsave("figures/exp3_good_priors_all_adj.png",plot=p,device="png",
+       width=8,height=6, units="cm")
+```
+
+## Next, comparing the posteriors
+
+Now we want to look at the aggregate posterior results in the ESTIMATED vs GIVEN conditions. Looks like they may be using the prior a bit more when it is GIVEN!
+
+
+```{r exp3all_posteriors, echo=FALSE,fig.height=3, fig.width=8}
+# make longer form
+de3est_long <- de3est %>%
+  filter(section=="posterior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="fy")
+de3est_long$x <- as.numeric(str_sub(de3est_long$x,2,10))/100
+
+de3est_long_bad <- de3est_bad %>%
+  filter(section=="posterior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="fy")
+de3est_long_bad$x <- as.numeric(str_sub(de3est_long_bad$x,2,10))/100
+
+# make summary dataset for graphing
+de3est_lsum <- de3est_long %>%
+  group_by(x) %>%
+  summarise(mean=mean(fy),
+            sd=sd(fy),
+            n=n(),
+            sderr = sd/sqrt(n)) %>%
+  ungroup()
+
+allest <- de3est_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  geom_jitter(data=de3est_long,mapping=aes(x=x,y=fy),alpha=0.1,
+              colour="mediumpurple4") +
+  geom_line(colour="mediumpurple4") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple4") +
+  theme_bw() +
+  labs(title = "Esᴛɪᴍᴀᴛᴇᴅ",x="Proportion of red",y="Probability")
+
+# make longer form
+de3given_long <- de3given %>%
+  filter(section=="posterior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="fy")
+de3given_long$x <- as.numeric(str_sub(de3given_long$x,2,10))/100
+
+de3given_long_bad <- de3given_bad %>%
+  filter(section=="posterior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="fy")
+de3given_long_bad$x <- as.numeric(str_sub(de3given_long_bad$x,2,10))/100
+
+# make summary dataset for graphing
+de3given_lsum <- de3given_long %>%
+  group_by(x) %>%
+  summarise(mean=mean(fy),
+            sd=sd(fy),
+            n=n(),
+            sderr = sd/sqrt(n)) %>%
+  ungroup()
+
+allgiven <- de3given_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  geom_jitter(data=de3given_long,mapping=aes(x=x,y=fy),alpha=0.1,
+              colour="mediumpurple3") +
+  geom_line(colour="mediumpurple3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple3") +
+  theme_bw() +
+  labs(title = "Gɪᴠᴇɴ",x="Proportion of red",y="Probability")
+
+
+p <- grid.arrange(allest,allgiven,ncol=2)
+ggsave("figures/exp3_good_posteriors_all_adj.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+```
+
+
+
+# Looking at fitted values: $\beta$, $\delta$, and $\gamma$
+
+Let's have a look at the distribution of parameters in Experiment 3. As a reminder:
+
+$\beta$: determines to what degree participants use their stated prior, and to what degree they use the uniform distribution to deduce their posterior. If $\beta=1$ that means it's all prior, if $\beta=0$ it is all uniform distribution
+
+$\gamma$: how much they weighted the red chips they saw. if $\gamma=1$ it is veridical, lower is underweighting, higher is overweighting. 
+
+$\delta$: how much they weighted the blue chips they saw. if $\delta=1$ it is veridical, lower is underweighting, higher is overweighting. 
+
+```{r viewdatascatall, echo=FALSE, fig.height=8}
+psbg <- de3_fitall %>%
+  ggplot(mapping=aes(x=beta,y=gamma,colour=delta)) +
+  geom_point(alpha=0.7,size=2) + 
+  theme_bw() +
+  facet_wrap(~condition) +
+  labs(title = "\u03b2 vs \u03b3",x="\u03b2",y="\u03b3")
+
+psbd <- de3_fitall %>%
+  ggplot(mapping=aes(x=beta,y=delta,colour=gamma)) +
+  geom_point(alpha=0.7,size=2) + 
+  theme_bw() +
+  facet_wrap(~condition) +
+  labs(title = "\u03b2 vs \u03b4",x="\u03b2",y="\u03b4")
+
+psgd <- de3_fitall %>%
+  ggplot(mapping=aes(x=gamma,y=delta,colour=beta)) +
+  geom_point(alpha=0.7,size=2) + 
+  theme_bw() +
+  facet_wrap(~condition) +
+  labs(title = "\u03b3 vs \u03b4",x="\u03b3",y="\u03b4")
+
+grid.arrange(psbg,psbd,psgd,nrow=3)
+```
+
+And also a 3D plot
+
+```{r viewdata3dall, echo=FALSE, fig.height=4}
+p <- plot_ly(x=de3_fitall$beta, y=de3_fitall$gamma, z=de3_fitall$delta,
+             type="scatter3d",mode="markers", color=de3_fitall$beta)
+p <- layout(p, scene = list(xaxis = list(title="\u03b2"),
+                            yaxis = list(title = "\u03b3"),
+                            zaxis = list(title="\u03b4")))
+p
+```
+
+Finally, let's look at histograms of all of the variables.
+
+```{r histallfits, echo=FALSE, fig.height=8}
+pb <- de3_fitall %>%
+  ggplot(mapping=aes(x=beta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b2",x="\u03b2",y="# of people")
+
+pg <- de3_fitall %>%
+  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=2.5,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) +
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b3",x="\u03b3",y="# of people")
+
+pd <- de3_fitall %>%
+  ggplot(mapping=aes(x=delta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=2.5,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b4",x="\u03b4",y="# of people")
+
+p <- grid.arrange(pb,pg,pd,ncol=3)
+ggsave("figures/exp3_good_beta_gamma_delta_histograms_adj.png",plot=p,device="png",
+       width=24,height=10, units="cm")
+
+```
+
+# Looking at fitted values: beta alone
+
+I wanted to see if the beta values would be different if we weren't also fitting delta and gamma. So let's look at that histogram.
+
+```{r histbetafits, echo=FALSE, fig.height=4}
+pbeta <- de3_fitbeta %>%
+  ggplot(mapping=aes(x=beta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b2 only",x="\u03b2",y="# of people")
+
+pbeta
+ggsave("figures/exp3_good_beta_histograms_adj.png",plot=pbeta,device="png",
+       width=8,height=10, units="cm")
+
+# percent less than 0.1
+pl3e <- round(100*sum(de3_fitbeta$beta[de3_fitbeta$condition=="Esᴛɪᴍᴀᴛᴇᴅ"]<0.1)/Ne,1)
+pl3g <- round(100*sum(de3_fitbeta$beta[de3_fitbeta$condition=="Gɪᴠᴇɴ"]<0.1)/Ng,1)
+# percent greater than 0.9
+pg3e <- round(100*sum(de3_fitbeta$beta[de3_fitbeta$condition=="Esᴛɪᴍᴀᴛᴇᴅ"]>0.9)/Ne,1)
+pg3g <- round(100*sum(de3_fitbeta$beta[de3_fitbeta$condition=="Gɪᴠᴇɴ"]>0.9)/Ng,1)
+```
+
+For the priors: `r pl3e`% in ESTIMATED and `r pl3g`% in GIVEN had $\beta$ less than 0.1, and `r pg3e`% in ESTIMATED and `r pg3g`% in GIVEN had $\beta$ greater than 0.9.
+
+# Looking at fitted values: $\gamma$ alone
+
+I wanted to see if the $\gamma$ values would be different if we weren't also fitting $\delta$ and $\beta$ So let's look at that histogram.
+
+```{r histgammafits, echo=FALSE, fig.height=4}
+pgamma <- de3_fitgamma %>%
+  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b3 only",x="\u03b3",y="# of people")
+
+pgamma
+ggsave("figures/exp3_good_gamma_histograms_adj.png",plot=pgamma,device="png",
+       width=8,height=10, units="cm")
+
+p <- grid.arrange(pbeta,pgamma,ncol=2)
+ggsave("figures/exp3_good_combined_histograms_adj.png",plot=p,device="png",
+       width=16,height=10, units="cm")
+
+# likelihood percent less than 1
+pll3g <- round(100*sum(de3_fitgamma$gamma[de3_fitgamma$condition=="Gɪᴠᴇɴ"]<1)/Ng,1)
+pll3e <- round(100*sum(de3_fitgamma$gamma[de3_fitgamma$condition=="Esᴛɪᴍᴀᴛᴇᴅ"]<1)/Ne,1)
+```
+
+For the likelihoods: `r pll3g`% in GIVEN and `r pll3e`% in ESTIMATED had $\gamma$ less than 1 (i.e., were conservative).
+
+# Looking at fitted values: $\beta$ and $\gamma$ alone
+
+Here we assume one parameter (call it $\gamma$) instead of two separate ones ($\gamma$ and $\delta$). i.e. this forces them to be the same and can be thought of as a conservatism parameter. I wanted to look at this because I think it might be a lot more interpretable than having both.
+
+$\beta$: determines to what degree participants use their stated prior, and to what degree they use the uniform distribution to deduce their posterior. If $\beta=1$ that means it's all prior, if $\beta=0$ it is all uniform distribution
+
+$\gamma$: how much they weighted the chips they saw. if $\gamma=1$ it is veridical, lower is underweighting, higher is overweighting. 
+
+```{r viewdatascattwo, echo=FALSE, fig.height=4}
+p <- de3_fittwo %>%
+  ggplot(mapping=aes(x=beta,y=gamma,colour=condition)) +
+  geom_point(alpha=0.6,size=3,show.legend=FALSE) + 
+  scale_colour_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition) +
+  theme_bw() +
+  labs(title = "\u03b2 vs \u03b3",x="\u03b2",y="\u03b3")
+
+p
+ggsave("figures/exp3_good_beta_gamma_fitted_values_adj.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+```
+
+Let's calculate the Spearman correlation:
+
+```{r correlationbetagamma}
+# estimated
+cor.test(de3_fittwo$beta[de3_fittwo$condition=="Esᴛɪᴍᴀᴛᴇᴅ"],
+         de3_fittwo$gamma[de3_fittwo$condition=="Esᴛɪᴍᴀᴛᴇᴅ"],
+         method="spearman")
+
+# given
+cor.test(de3_fittwo$beta[de3_fittwo$condition=="Gɪᴠᴇɴ"],
+         de3_fittwo$gamma[de3_fittwo$condition=="Gɪᴠᴇɴ"],
+         method="spearman")
+```
+
+And a histogram of them too
+
+```{r histtwofits, echo=FALSE, fig.height=6}
+pb <- de3_fittwo %>%
+  ggplot(mapping=aes(x=beta,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b2",x="\u03b2",y="# of people")
+
+pg <- de3_fittwo %>%
+  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Distribution of \u03b3",x="\u03b3",y="# of people")
+
+p <- grid.arrange(pb,pg,ncol=2)
+ggsave("figures/exp3_good_beta_gamma_histograms_adj.png",plot=p,device="png",
+       width=16,height=10, units="cm")
+
+# percent less than 0.1
+pl3e <- round(100*sum(de3_fittwo$beta[de3_fittwo$condition=="Esᴛɪᴍᴀᴛᴇᴅ"]<0.1)/Ne,1)
+pl3g <- round(100*sum(de3_fittwo$beta[de3_fittwo$condition=="Gɪᴠᴇɴ"]<0.1)/Ng,1)
+# percent greater than 0.9
+pg3e <- round(100*sum(de3_fittwo$beta[de3_fittwo$condition=="Esᴛɪᴍᴀᴛᴇᴅ"]>0.9)/Ne,1)
+pg3g <- round(100*sum(de3_fittwo$beta[de3_fittwo$condition=="Gɪᴠᴇɴ"]>0.9)/Ng,1)
+
+# likelihood percent less than 1
+pll3g <- round(100*sum(de3_fittwo$gamma[de3_fittwo$condition=="Gɪᴠᴇɴ"]<1)/Ng,1)
+pll3e <- round(100*sum(de3_fittwo$gamma[de3_fittwo$condition=="Esᴛɪᴍᴀᴛᴇᴅ"]<1)/Ne,1)
+
+```
+
+For the priors: `r pl3e`% in ESTIMATED and `r pl3g`% in GIVEN had $\beta$ less than 0.1, and `r pg3e`% in ESTIMATED and `r pg3g`% in GIVEN had $\beta$ greater than 0.9.
+
+For the likelihoods: `r pll3g`% in GIVEN and `r pll3e`% in ESTIMATED had $\gamma$ less than 1 (i.e., were conservative).
+
+# Individuals: ESTIMATED condition
+
+So now let's look at individuals - compare their prior and posterior after five, based on the best-fit $\beta$ and $\gamma$ 
+
+*red line*: their reported prior
+
+*dark purple line*: their reported posterior
+
+*solid grey*: Bayes rule prediction assuming their prior 
+
+*dotted black*: line based on best-fit $\beta$ and $\gamma$
+
+```{r individual_people_betagamma, echo=FALSE, fig.height=40}
+# first the bad fits
+ftps <- de3e_fittwo_bad %>% select(pID,beta,gamma,value)
+de3eprior_long_ps_bad <- merge(de3eprior_long_bad,ftps) 
+
+de3epriorpr_long_bad <- de3eprior_long_ps_bad %>%
+  group_by(pID) %>%
+  mutate(prpy = pry*(x^4)*(1-x)) %>%
+  mutate(ppy = prpy/sum(prpy)) %>%
+  mutate(prpybest = (beta*pry+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(ppyb = prpybest/sum(prpybest)) %>%
+  ungroup() %>%
+  select(pID,x,pry,ppy,ppyb,beta,gamma,value)
+
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+y <- x^4*(1-x)
+de3est_long_bad$py <- rep(y/sum(y),badNe)
+
+de3e_long_bad <- merge(de3epriorpr_long_bad,de3est_long_bad)
+
+de3e_long_ps_bad <- de3e_long_bad %>%
+  arrange(gamma,beta) %>%
+  mutate(name = paste0("\u03b2=",round(beta,digits=2),
+                       ", \u03b3=",round(gamma,digits=2),
+                       "\n MSE=",round(value,digits=4),
+                       " [",pID,"]"))
+
+p <- de3e_long_ps_bad %>%
+  ggplot(mapping=aes(x=x, y=pry)) +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(colour="darkred") + 
+  geom_line(mapping=aes(x=x,y=fy),colour="mediumpurple4") +
+  #geom_line(mapping=aes(x=unx,y=uny),colour="dodgerblue4") +
+  theme_bw() +
+  facet_wrap(~name,ncol=8) +
+  labs(title = "Individual fits, Esᴛɪᴍᴀᴛᴇᴅ: \u03b2 and \u03b3")
+
+p
+
+ggsave("figures/exp3_bad_beta_gamma_indiv_fits_est_adj.png",plot=p,device="png",
+       width=40,height=14, units="cm")
+
+# then the good fits
+ftps <- de3e_fittwo %>% select(pID,beta,gamma,value)
+de3eprior_long_ps <- merge(de3eprior_long,ftps) 
+
+de3epriorpr_long <- de3eprior_long_ps %>%
+  group_by(pID) %>%
+  mutate(prpy = pry*(x^4)*(1-x)) %>%
+  mutate(ppy = prpy/sum(prpy)) %>%
+  mutate(prpybest = (beta*pry+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(ppyb = prpybest/sum(prpybest)) %>%
+  ungroup() %>%
+  select(pID,x,pry,ppy,ppyb,beta,gamma,value)
+
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+y <- x^4*(1-x)
+de3est_long$py <- rep(y/sum(y),Ne)
+
+de3e_long <- merge(de3epriorpr_long,de3est_long)
+
+de3e_long_ps <- de3e_long %>%
+  arrange(gamma,beta) %>%
+  mutate(name = paste0("\u03b2=",round(beta,digits=2),
+                       ", \u03b3=",round(gamma,digits=2),
+                       "\n MSE=",round(value,digits=4),
+                       " [",pID,"]"))
+
+p <- de3e_long_ps %>%
+  ggplot(mapping=aes(x=x, y=pry)) +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(colour="darkred") + 
+  geom_line(mapping=aes(x=x,y=fy),colour="mediumpurple4") +
+  #geom_line(mapping=aes(x=unx,y=uny),colour="dodgerblue4") +
+  theme_bw() +
+  facet_wrap(~name,ncol=8) +
+  labs(title = "Individual fits, Esᴛɪᴍᴀᴛᴇᴅ: \u03b2 and \u03b3")
+
+p
+
+ggsave("figures/exp3_good_beta_gamma_indiv_fits_est_adj.png",plot=p,device="png",
+       width=40,height=50, units="cm")
+
+# look at the correlations between predicted and reported posteriors
+de3epreds <- de3epriorpr_long %>% 
+  group_by(pID) %>% 
+  summarise(r = cor.test(ppy,ppyb)$estimate[[1]], 
+            p = cor.test(ppy,ppyb)$p.value[[1]]) %>%
+  ungroup()
+```
+
+# Individuals: GIVEN condition
+
+We're going to do the same thing as before but this time with people in the GIVEN condition  
+
+*red line*: the given prior
+
+*dark blue line*: their reported posterior after unlimited
+
+*solid grey*: Bayes rule prediction assuming the given prior 
+
+*dotted black*: line based on best-fit $\beta$ and $\gamma$
+
+```{r individual_people_betagamma_given, echo=FALSE, fig.height=40}
+# first the bad fits
+pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+pry <- pry/sum(pry)
+de3gprior_long_bad <- de3given_bad %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry") %>%
+  arrange(pID,x)
+de3gprior_long_bad$x <- as.numeric(str_sub(de3gprior_long_bad$x,2,10))/100
+de3gprior_long_bad$pry <- rep(pry,badNg)
+
+utps <- de3g_fittwo_bad %>% select(pID,beta,gamma,value)
+de3gprior_long_ps_bad <- merge(de3gprior_long_bad,utps) 
+
+de3gpriorpr_long_bad <- de3gprior_long_ps_bad %>%
+  group_by(pID) %>%
+  mutate(prpy = pry*(x^4)*(1-x)^1) %>%
+  mutate(ppy = prpy/sum(prpy)) %>%
+  mutate(pp = x^4*(1-x)^1) %>%
+  mutate(py = pp/sum(pp)) %>%
+  mutate(prpybest = (beta*pry+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4))*(1-x)^(gamma*1)) %>%
+  mutate(ppyb = prpybest/sum(prpybest)) %>%
+  ungroup() %>%
+  select(pID,x,py,pry,ppy,ppyb,beta,gamma,value)
+
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+y <- x^4*(1-x)
+de3given_long_bad$py <- rep(y/sum(y),badNg)
+
+de3g_long_bad <- merge(de3gpriorpr_long_bad,de3given_long_bad)
+
+de3g_long_ps_bad <- de3g_long_bad %>%
+  arrange(gamma,beta) %>%
+  mutate(name = paste0("\u03b2=",round(beta,digits=2),
+                       ", \u03b3=",round(gamma,digits=2),
+                       "\n MSE=",round(value,digits=4),
+                       " [",pID,"]"))
+
+p <- de3g_long_ps_bad %>%
+  ggplot(mapping=aes(x=x, y=pry)) +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(colour="darkred") + 
+  geom_line(mapping=aes(x=x,y=fy),colour="mediumpurple3") +
+  #geom_line(mapping=aes(x=unx,y=uny),colour="dodgerblue4") +
+  theme_bw() +
+  facet_wrap(~name,ncol=8) +
+  labs(title = "Individual fits, Gɪᴠᴇɴ: \u03b2 and \u03b3")
+
+p
+
+ggsave("figures/exp3_bad_beta_gamma_indiv_fits_given_adj.png",plot=p,device="png",
+       width=40,height=14, units="cm")
+
+# then the good fits
+pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+pry <- pry/sum(pry)
+de3gprior_long <- de3given %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry") %>%
+  arrange(pID,x)
+de3gprior_long$x <- as.numeric(str_sub(de3gprior_long$x,2,10))/100
+de3gprior_long$pry <- rep(pry,Ng)
+
+utps <- de3g_fittwo %>% select(pID,beta,gamma,value)
+de3gprior_long_ps <- merge(de3gprior_long,utps) 
+
+de3gpriorpr_long <- de3gprior_long_ps %>%
+  group_by(pID) %>%
+  mutate(prpy = pry*(x^4)*(1-x)^1) %>%
+  mutate(ppy = prpy/sum(prpy)) %>%
+  mutate(pp = x^4*(1-x)^1) %>%
+  mutate(py = pp/sum(pp)) %>%
+  mutate(prpybest = (beta*pry+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4))*(1-x)^(gamma*1)) %>%
+  mutate(ppyb = prpybest/sum(prpybest)) %>%
+  ungroup() %>%
+  select(pID,x,py,pry,ppy,ppyb,beta,gamma,value)
+
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+y <- x^4*(1-x)
+de3given_long$py <- rep(y/sum(y),Ng)
+
+de3g_long <- merge(de3gpriorpr_long,de3given_long)
+
+de3g_long_ps <- de3g_long %>%
+  arrange(gamma,beta) %>%
+  mutate(name = paste0("\u03b2=",round(beta,digits=2),
+                       ", \u03b3=",round(gamma,digits=2),
+                       "\n MSE=",round(value,digits=4),
+                       " [",pID,"]"))
+
+p <- de3g_long_ps %>%
+  ggplot(mapping=aes(x=x, y=pry)) +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(colour="darkred") + 
+  geom_line(mapping=aes(x=x,y=fy),colour="mediumpurple3") +
+  #geom_line(mapping=aes(x=unx,y=uny),colour="dodgerblue4") +
+  theme_bw() +
+  facet_wrap(~name,ncol=8) +
+  labs(title = "Individual fits, Gɪᴠᴇɴ: \u03b2 and \u03b3")
+
+p
+
+ggsave("figures/exp3_good_beta_gamma_indiv_fits_given_adj.png",plot=p,device="png",
+       width=40,height=50, units="cm")
+
+# look at the correlations between predicted and reported posteriors
+de3gpreds <- de3gpriorpr_long %>% 
+  group_by(pID) %>% 
+  summarise(r = cor.test(ppy,ppyb)$estimate[[1]], 
+            p = cor.test(ppy,ppyb)$p.value[[1]]) %>%
+  ungroup()
+
+de3gpreds$condition <- "Gɪᴠᴇɴ"
+de3epreds$condition <- "Esᴛɪᴍᴀᴛᴇᴅ"
+de3preds <- rbind(de3gpreds,de3epreds)
+
+```
+
+We can also get a sense of how good the fits were.
+
+```{r goodnessfitsbetagamma, echo=FALSE, fig.height=10}
+prmse <- de3_fittwo %>%
+  ggplot(mapping=aes(x=value,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.005,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "MSE (\u03b2 and \u03b3)",
+       x="MSE",y="# of people")
+
+pcorr <- de3preds %>%
+  ggplot(mapping=aes(x=r,fill=condition)) +
+  geom_histogram(alpha=0.7,colour="black",binwidth=0.04,show.legend=FALSE) + 
+  scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
+  facet_wrap(~condition,ncol=1) +
+  theme_bw() +
+  labs(title = "Correlation (\u03b2 and \u03b3)",
+       x="r",y="# of people")
+
+p <- grid.arrange(prmse,pcorr,ncol=2)
+
+p
+
+ggsave("figures/exp3_good_beta_gamma_fits_adj.png",plot=p,device="png",
+       width=15,height=10, units="cm")
+
+```
+
+
+# Aggregate fits
+
+We can also look at the parameter values for the aggregate fits. First, GIVEN. 
+
+```{r aggregatefits_given, echo=FALSE, fig.height=3}
+dagg <- read.csv(file=here("datafiles/exp3all_good_aggregate_fits_adj.csv")) %>% as_tibble()
+dagg$condition <- as.factor(dagg$condition)
+levels(dagg$condition) <- c("Esᴛɪᴍᴀᴛᴇᴅ", "Gɪᴠᴇɴ")
+dagg_g <- dagg %>% filter(condition=="Gɪᴠᴇɴ")
+dagg_e <- dagg %>% filter(condition=="Esᴛɪᴍᴀᴛᴇᴅ")
+
+# prediction assuming uniform prior 
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+pp <- x^4*(1-x)
+py <- pp/sum(pp)
+
+# prediction assuming the given prior
+pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+pry <- pry/sum(pry)
+prpy <- pry*x^4*(1-x)
+ppy <- prpy/sum(prpy)
+
+# prediction assuming best fits
+beta <- dagg_g$beta[dagg_g$fitted=="all"]
+gamma <- dagg_g$gamma[dagg_g$fitted=="all"]
+delta <- dagg_g$delta[dagg_g$fitted=="all"]
+prpybest <- (beta*pry+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("\u03b2=",round(beta,digits=2),
+  ", \u03b3=",round(gamma,digits=2)," \u03b4=",round(delta,digits=2))
+
+pgiven_all<- de3given_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=d,mapping=aes(x=x,y=pry),colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple3") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits
+beta <- dagg_g$beta[dagg_g$fitted=="two"]
+gamma <- dagg_g$gamma[dagg_g$fitted=="two"]
+delta <- dagg_g$gamma[dagg_g$fitted=="two"]
+prpybest <- (beta*pry+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("Gɪᴠᴇɴ: \u03b2=",round(beta,digits=2),
+  ", \u03b3=",round(gamma,digits=2))
+
+pgiven_two <- de3given_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=d,mapping=aes(x=x,y=pry),colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple3") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits
+beta <- dagg_g$beta[dagg_g$fitted=="beta"]
+gamma <- 1
+delta <- 1
+prpybest <- (beta*pry+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("\u03b2=",round(beta,digits=2))
+
+pgiven_beta <- de3given_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=d,mapping=aes(x=x,y=pry),colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple3") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits
+gamma <- dagg_g$gamma[dagg_g$fitted=="gamma"]
+beta <- 1
+delta <- gamma
+prpybest <- (beta*pry+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("\u03b3=",round(gamma,digits=2))
+
+pgiven_gamma <- de3given_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=d,mapping=aes(x=x,y=pry),colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple3") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple3") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+grid.arrange(pgiven_all,pgiven_two,pgiven_beta,pgiven_gamma,ncol=4)
+```
+
+Then, ESTIMATED
+
+```{r aggregatefits_un, echo=FALSE, fig.height=3}
+# prediction assuming uniform prior 
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+pp <- x^4*(1-x)
+py <- pp/sum(pp)
+nr <- 4
+nb <- 1
+
+# prediction assuming their prior
+prpy <- (de3eprior_lsum$mean)*x^4*(1-x)^1
+ppy <- prpy/sum(prpy)
+
+# prediction assuming best fits
+beta <- dagg_e$beta[dagg_e$fitted=="all"]
+gamma <- dagg_e$gamma[dagg_e$fitted=="all"]
+delta <- dagg_e$delta[dagg_e$fitted=="all"]
+prpybest <- (beta*(de3eprior_lsum$mean)+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("\u03b2=",round(beta,digits=2),
+  ", \u03b3=",round(gamma,digits=2)," \u03b4=",round(delta,digits=2))
+
+pest_all<- de3est_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=de3eprior_lsum,mapping=aes(x=x,y=mean),
+            colour="darkred") + 
+  geom_errorbar(data=de3eprior_lsum,
+                mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple4") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple4") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits
+beta <- dagg_e$beta[dagg_e$fitted=="two"]
+gamma <- dagg_e$gamma[dagg_e$fitted=="two"]
+delta <- dagg_e$gamma[dagg_e$fitted=="two"]
+prpybest <- (beta*(de3eprior_lsum$mean)+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("Esᴛɪᴍᴀᴛᴇᴅ: \u03b2=",round(beta,digits=2),
+  ", \u03b3=",round(gamma,digits=2))
+
+pest_two <- de3est_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=de3eprior_lsum,mapping=aes(x=x,y=mean),
+            colour="darkred") + 
+  geom_errorbar(data=de3eprior_lsum,
+                mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple4") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple4") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits
+beta <- dagg_e$beta[dagg_e$fitted=="beta"]
+gamma <- 1
+delta <- 1
+prpybest <- (beta*(de3eprior_lsum$mean)+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("\u03b2=",round(beta,digits=2))
+
+pest_beta <- de3est_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=de3eprior_lsum,mapping=aes(x=x,y=mean),
+            colour="darkred") + 
+  geom_errorbar(data=de3eprior_lsum,
+                mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple4") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple4") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+# prediction assuming best fits
+gamma <- dagg_e$gamma[dagg_e$fitted=="gamma"]
+delta <- gamma
+beta <- 1
+prpybest <- (beta*(de3eprior_lsum$mean)+(1-beta)*rep(1/11,11))*
+  (x^(gamma*4))*(1-x)^delta
+ppyb = prpybest/sum(prpybest)
+d <- tibble(x,py,ppy,ppyb)
+
+t <- paste0("\u03b3=",round(gamma,digits=2))
+
+pest_gamma <- de3est_lsum %>%
+  ggplot(mapping=aes(x=x,y=mean)) +
+  #geom_line(data=d,mapping=aes(x=x,y=py),linetype="dotted",
+  #          colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppy),linetype="solid",
+            colour="darkgray") +
+  geom_line(data=d,mapping=aes(x=x,y=ppyb),linetype="dotted",
+            colour="black") +
+  geom_line(data=de3eprior_lsum,mapping=aes(x=x,y=mean),
+            colour="darkred") + 
+  geom_errorbar(data=de3eprior_lsum,
+                mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="darkred") +
+  ylim(0,1) +
+  geom_line(colour="mediumpurple4") + 
+  geom_errorbar(mapping = aes(ymin = mean-sderr, ymax = mean+sderr),
+                width=0.02,colour="mediumpurple4") +
+  theme_bw() +
+  labs(title = t,x="Proportion of red",y="Probability")
+
+
+grid.arrange(pest_all,pest_two,pest_beta,pest_gamma,ncol=4)
+
+p <- grid.arrange(pest_two,pgiven_two,ncol=2)
+ggsave("figures/exp3_good_beta_gamma_aggregate_fits_adj.png",plot=p,device="png",
+       width=16,height=8, units="cm")
+```

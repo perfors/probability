@@ -1,0 +1,425 @@
+---
+title: "Creation of data files for analysis"
+author: "Andrew Perfors"
+output: html_document
+---
+
+This creates the data files we'll need for subsequent analyses for Experiment 2.
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(rminer)
+
+# load the full datasets
+de2raw <- read.csv(file=here("Experiment2_Andy.csv")) %>% as_tibble()
+# remove people who failed the bot check
+bad <- de2raw %>% filter(botCheck==0 | actuallyEstimated==0)
+badpeople <- bad$pID
+de2 <- de2raw %>% filter(!(pID %in% badpeople))
+bad <- de2raw %>% filter(pID %in% badpeople)
+de2$pID <- as.factor(de2$pID)
+
+# write the two main datasets
+write.csv(bad,"datafiles/exp2_bad_data.csv")
+write.csv(de2,"datafiles/exp2_good_data.csv")
+
+# split by condition
+de2peak <- de2 %>% filter(condition=="peaked")
+de2unif <- de2 %>% filter(condition=="uniform")
+write.csv(de2unif,"datafiles/exp2_uniform_data.csv")
+write.csv(de2peak,"datafiles/exp2_peaked_data.csv")
+
+# make the peak all nonzero
+de2peak_long <- de2peak %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de2peak_long$x <- as.numeric(str_sub(de2peak_long$x,2,10))/100
+
+de2peak_long_adj <- de2peak_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de2peak_adj <- de2peak_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de2peak_old <- de2peak %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de2peak <- merge(de2peak_old,de2peak_adj) %>%
+  select(pID,condition,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,
+         actuallyEstimated)
+
+# make the uniform all nonzero
+de2unif_long <- de2unif %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de2unif_long$x <- as.numeric(str_sub(de2unif_long$x,2,10))/100
+
+de2unif_long_adj <- de2unif_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de2unif_adj <- de2unif_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de2unif_old <- de2unif %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de2unif <- merge(de2unif_old,de2unif_adj) %>%
+  select(pID,condition,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,
+         actuallyEstimated)
+
+de2 <- rbind(de2peak,de2unif)
+write.csv(de2,"datafiles/exp2_good_data_adj.csv")
+
+```
+
+
+## Peaked prior
+
+This contains the code to fit individuals in three different ways. 
+
+1. Fit $\beta$, $\gamma$, and $\delta$. Output is in `exp2_peaked_allfits_adj.csv`
+
+2. Fit beta and one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp2_peaked_twofits_adj.csv`
+
+3. Fit only $\beta$, and force $\gamma=\delta=1$. The point of this is to see if the fits we get on $\beta$ which imply they are ignoring the prior are an artefact of also fitting $\delta$ and $\gamma$. Output is in `exp2_peaked_betafits_adj.csv`
+
+4. Fit only $\gamma$, and assume that $\beta=1$. The point of this is the opposite of #3. Output is in `exp2_peaked_gammafits_adj.csv`
+
+```{r fitthingspeaked}
+de2peak_long <- de2peak %>% 
+  select(-c(condition,age,gender,botCheck,actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="y")
+de2peak_long$x <- as.numeric(str_sub(de2peak_long$x,2,10))/100
+
+# the function that fits beta, gamma, and delta
+frpeakall <- function(ps,d) {
+   pry <- c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0)
+   uny <- rep(1/11,11)
+   x <- d$x
+   y <- d$y
+   beta <- ps[1]
+   gamma <- ps[2]
+   delta <- ps[3]
+   y <- y/sum(y)
+   likelihood <- x^(gamma*4)*(1-x)^(delta*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits beta and gamma/delta as one
+frpeaktwo <- function(ps,d) {
+   pry <- c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0)
+   uny <- rep(1/11,11)
+   x <- d$x
+   y <- d$y
+   beta <- ps[1]
+   gamma <- ps[2]
+   y <- y/sum(y)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only beta
+frpeakbeta <- function(ps,d) {
+   pry <- c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0)
+   uny <- rep(1/11,11)
+   x <- d$x
+   y <- d$y
+   beta <- ps[1]
+   gamma <- 1
+   y <- y/sum(y)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only gamma
+frpeakgamma <- function(ps,d) {
+   pry <- c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0)
+   x <- d$x
+   y <- d$y
+   gamma <- ps[1]
+   y <- y/sum(y)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- pry
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# fitting delta, gamma, and beta
+ddpeakall <- de2peak_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1,1),frpeakall,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001,0.0000001),
+                          upper=c(0.9999999,50,50))))
+
+de2peak_all <- de2peak
+de2peak_all$beta <- NA
+de2peak_all$gamma <- NA
+de2peak_all$delta <- NA
+de2peak_all$value <- NA
+
+for (i in 1:nrow(de2peak_all)) {
+   pid <- ddpeakall$pID[i]
+   de2peak_all$beta[de2peak_all$pID==pid] <-
+    ddpeakall$fit[[i]]$par[1]
+   de2peak_all$gamma[de2peak_all$pID==pid] <-
+    ddpeakall$fit[[i]]$par[2]
+   de2peak_all$delta[de2peak_all$pID==pid] <-
+    ddpeakall$fit[[i]]$par[3]
+   de2peak_all$value[de2peak_all$pID==pid] <-
+    ddpeakall$fit[[i]]$value[1]
+}
+
+write.csv(de2peak_all,"datafiles/exp2_peaked_allfits_adj.csv")
+
+# fitting delta/gamma, and beta
+ddpeaktwo <- de2peak_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frpeaktwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+de2peak_two <- de2peak
+de2peak_two$beta <- NA
+de2peak_two$gamma <- NA
+de2peak_two$value <- NA
+
+for (i in 1:nrow(de2peak_two)) {
+      pid <- ddpeaktwo$pID[i]
+   de2peak_two$beta[de2peak_two$pID==pid] <-
+    ddpeaktwo$fit[[i]]$par[1]
+   de2peak_two$gamma[de2peak_two$pID==pid] <-
+    ddpeaktwo$fit[[i]]$par[2]
+   de2peak_two$value[de2peak_two$pID==pid] <-
+    ddpeaktwo$fit[[i]]$value[1]
+}
+
+write.csv(de2peak_two,"datafiles/exp2_peaked_twofits_adj.csv")
+
+# fitting only beta
+ddpeakbeta <- de2peak_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5),frpeakbeta,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(0.9999999))))
+
+de2peak_beta <- de2peak
+de2peak_beta$beta <- NA
+de2peak_beta$value <- NA
+
+for (i in 1:nrow(de2peak_beta)) {
+   pid <- ddpeakbeta$pID[i]
+   de2peak_beta$beta[de2peak_beta$pID==pid] <-
+    ddpeakbeta$fit[[i]]$par[1]
+   de2peak_beta$value[de2peak_beta$pID==pid] <-
+    ddpeakbeta$fit[[i]]$value[1]
+}
+
+write.csv(de2peak_beta,"datafiles/exp2_peaked_betafits_adj.csv")
+
+# fitting only gamma
+ddpeakgamma <- de2peak_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),frpeakgamma,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+de2peak_gamma <- de2peak
+de2peak_gamma$beta <- NA
+de2peak_gamma$value <- NA
+
+for (i in 1:nrow(de2peak_gamma)) {
+   pid <- ddpeakbeta$pID[i]
+   de2peak_gamma$gamma[de2peak_gamma$pID==pid] <-
+    ddpeakgamma$fit[[i]]$par[1]
+   de2peak_gamma$value[de2peak_gamma$pID==pid] <-
+    ddpeakgamma$fit[[i]]$value[1]
+}
+
+write.csv(de2peak_gamma,"datafiles/exp2_peaked_gammafits_adj.csv")
+```
+
+## Uniform prior
+
+Now we're going to do the same thing with the uniform condition. Here the prior is actually uniform so fitting $\beta$ doesn't make sense. So we have only two things.
+
+1. Fit $\gamma$ and $\delta$. Output is in `exp2_uniform_allfits_adj.csv`
+
+2. Fit one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp2_uniform_twofits_adj.csv`
+
+
+```{r fitthingsuniform}
+de2unif_long <- de2unif %>% 
+  select(-c(condition,age,gender,botCheck,actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="y")
+de2unif_long$x <- as.numeric(str_sub(de2unif_long$x,2,10))/100
+
+# the function that fits gamma and delta
+frunifall <- function(ps,d) {
+   x <- d$x
+   y <- d$y
+   gamma <- ps[1]
+   delta <- ps[2]
+   y <- y/sum(y)
+   likelihood <- x^(gamma*4)*(1-x)^(delta*1)
+   prior <- rep(1/11,11)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+
+# the function that fits gamma/delta as one
+fruniftwo <- function(ps,d) {
+   x <- d$x
+   y <- d$y
+   gamma <- ps[1]
+   y <- y/sum(y)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- rep(1/11,11)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# fitting delta and gamma
+ddunifall <- de2unif_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1,1),frunifall,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(50,50))))
+
+de2unif_all <- de2unif
+de2unif_all$gamma <- NA
+de2unif_all$delta <- NA
+de2unif_all$value <- NA
+
+for (i in 1:nrow(de2unif_all)) {
+   pid <- ddunifall$pID[i]
+   de2unif_all$gamma[de2unif_all$pID==pid] <-
+    ddunifall$fit[[i]]$par[1]
+   de2unif_all$delta[de2unif_all$pID==pid] <-
+    ddunifall$fit[[i]]$par[2]
+   de2unif_all$value[de2unif_all$pID==pid] <-
+    ddunifall$fit[[i]]$value[1]
+}
+
+write.csv(de2unif_all,"datafiles/exp2_uniform_allfits_adj.csv")
+
+# fitting delta/gamma
+dduniftwo <- de2unif_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),fruniftwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+de2unif_two <- de2unif
+de2unif_two$gamma <- NA
+de2unif_two$value <- NA
+
+for (i in 1:nrow(de2unif_two)) {
+   pid <- dduniftwo$pID[i]
+   de2unif_two$gamma[de2unif_two$pID==pid] <-
+    dduniftwo$fit[[i]]$par[1]
+   de2unif_two$value[de2unif_two$pID==pid] <-
+    dduniftwo$fit[[i]]$value[1]
+}
+
+write.csv(de2unif_two,"datafiles/exp2_uniform_twofits_adj.csv")
+```
+
+
+
+## Calculate aggregate best-fit parameters
+
+This contains the code for the aggregate best fits in different ways. First we'll do it just for the peaked condition. There are three things:
+
+1. Fit $\beta$, $\gamma$, and $\delta$. Output is in `exp2agg_peaked_allfits_adj.csv`
+
+2. Fit $\beta$ and one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp2agg_peaked_twofits_adj.csv`
+
+3. Fit only $\beta$, and force $\gamma=\delta=1$. The point of this is to see if the fits we get on $\beta$ which imply they are ignoring the prior are an artefact of also fitting $\delta$ and $\gamma$. Output is in `exp2agg_peaked_betafits_adj.csv`
+
+4. Fit only $\gamma$, and force $\beta=1$.
+
+```{r fitthingsaggregatepeaked}
+# make dataset with aggregate results
+de2_long <- de2 %>% 
+  select(-c(age,gender,botCheck,actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="y")
+de2_long$x <- as.numeric(str_sub(de2_long$x,2,10))/100
+
+de2_lsum <- de2_long %>%
+  group_by(condition,x) %>%
+  summarise(y=mean(y)) %>%
+  ungroup()
+write.csv(de2_lsum,"datafiles/exp2all_aggregate_curves_adj.csv")
+
+de2peak_lsum <- de2_lsum %>% filter(condition=="peaked")
+de2unif_lsum <- de2_lsum %>% filter(condition=="uniform")
+
+# fitting delta, gamma, and beta on peaked
+ddaggall_pk <- optim(c(0.5,1,1),frpeakall,d=de2peak_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001,0.0000001),
+                  upper=c(0.9999999,50,50))
+
+# fitting gamma and beta on peaked
+ddaggtwo_pk <- optim(c(0.5,1),frpeaktwo,d=de2peak_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001),
+                  upper=c(0.9999999,50))
+
+# fitting beta on peaked
+ddaggbeta_pk <- optim(c(0.5),frpeakbeta,d=de2peak_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(0.9999999))
+
+# fitting gamma on peaked
+ddagggamma_pk <- optim(c(1),frpeakgamma,d=de2peak_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(50))
+
+# fitting delta and gamma on uniform
+ddaggall_un <- optim(c(1,1),frunifall,d=de2unif_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001),
+                  upper=c(50,50))
+
+# fitting gamma on uniform
+ddaggtwo_un <- optim(c(1,1),fruniftwo,d=de2unif_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),
+                  upper=c(50))
+
+condition <- c(rep("peaked",4),rep("uniform",2))
+fitted <- c("all","two","beta","gamma","all","two")
+beta <- c(ddaggall_pk$par[1],ddaggtwo_pk$par[1],ddaggbeta_pk$par[1],
+          NA,NA,NA)
+gamma <- c(ddaggall_pk$par[2],ddaggtwo_pk$par[2],NA,ddagggamma_pk$par[1],
+          ddaggall_un$par[1],ddaggtwo_un$par[1])
+delta <- c(ddaggall_pk$par[3],NA,NA,NA,ddaggall_un$par[2],NA)
+value <- c(ddaggall_pk$value,ddaggtwo_pk$value,ddaggbeta_pk$value,
+           ddagggamma_pk$value,ddaggall_un$value,ddaggtwo_un$value)
+dagg <- tibble(condition,fitted,beta,gamma,delta,value)
+write.csv(dagg,"datafiles/exp2all_aggregate_fits_adj.csv")
+```

@@ -1,0 +1,603 @@
+---
+title: "Creation of data files for analysis"
+author: "Andrew Perfors"
+output: html_document
+---
+
+This creates the data files we'll need for subsequent analyses.
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(rminer)
+
+# load the full datasets
+de3raw <- read.csv(file=here("Experiment3_Andy.csv")) %>% as_tibble()
+# remove people who failed the bot check
+bad <- de3raw %>% filter(botCheck==0 | actuallyEstimated==0)
+badpeople <- bad$pID
+de3 <- de3raw %>% filter(!(pID %in% badpeople))
+bad <- de3raw %>% filter(pID %in% badpeople)
+de3$pID <- as.factor(de3$pID)
+
+# write the two main datasets
+write.csv(bad,"datafiles/exp3_bad_data.csv")
+write.csv(de3,"datafiles/exp3_good_data.csv")
+
+# split by condition
+de3est <- de3 %>% filter(condition=="estimated")
+de3given <- de3 %>% filter(condition=="given")
+
+# make the priors all nonzero
+de3aprior_long <- de3est %>%
+  filter(section=="prior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de3aprior_long$x <- as.numeric(str_sub(de3aprior_long$x,2,10))/100
+
+de3aprior_long_adj <- de3aprior_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de3aprior_adj <- de3aprior_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de3aprior_old <- de3est %>% filter(section=="prior")
+de3aprior_old <- de3aprior_old %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de3aprior_new <- merge(de3aprior_old,de3aprior_adj) %>%
+  select(pID,condition,section,seenRed,seenBlue,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,time,
+         chipsOrder,actuallyEstimated)
+
+# make the posterior for estimated all nonzero
+de3estpost_long <- de3est %>%
+  filter(section=="posterior") %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de3estpost_long$x <- as.numeric(str_sub(de3estpost_long$x,2,10))/100
+
+de3estpost_long_adj <- de3estpost_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de3estpost_adj <- de3estpost_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de3estpost_old <- de3est %>% filter(section=="posterior")
+de3estpost_old <- de3estpost_old %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de3estpost_new <- merge(de3estpost_old,de3estpost_adj) %>%
+  select(pID,condition,section,seenRed,seenBlue,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,time,
+         chipsOrder,actuallyEstimated)
+
+de3est_adj <- rbind(de3aprior_new,de3estpost_new)
+
+# make the posterior for given all nonzero
+de3givenpost_long <- de3given %>%
+  select(pID,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID),names_to="x",values_to="pry")
+de3givenpost_long$x <- as.numeric(str_sub(de3givenpost_long$x,2,10))/100
+
+de3givenpost_long_adj <- de3givenpost_long %>%
+  group_by(pID) %>%
+  mutate(adjpry = pry+0.01) %>%
+  mutate(apry = adjpry/sum(adjpry)) %>%
+  ungroup() %>%
+  mutate(nx = paste0("e",x*100)) %>%
+  select(pID,nx,apry) 
+
+de3givenpost_adj <- de3givenpost_long_adj %>%
+  pivot_wider(names_from=nx,values_from=apry)
+
+de3givenpost_old <- de3given %>%
+  select(-c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100))
+
+de3given_adj <- merge(de3givenpost_old,de3givenpost_adj) %>%
+  select(pID,condition,section,seenRed,seenBlue,e0,e10,e20,e30,e40,
+         e50,e60,e70,e80,e90,e100,age,gender,botCheck,time,
+         chipsOrder,actuallyEstimated)
+
+de3all_adj <- rbind(de3est_adj,de3given_adj)
+
+write.csv(de3all_adj,"datafiles/exp3_all_data_adj.csv")
+
+```
+
+
+## ESTIMATED condition
+
+This contains the code to fit individuals in four different ways. 
+
+1. Fit $\beta$, $\gamma$, and $\delta$. Output is in `exp3est_allfits_adj.csv`
+
+2. Fit beta and one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp3est_twofits_adj.csv`
+
+3. Fit only $\beta$, and force $\gamma=\delta=1$. The point of this is to see if the fits we get on $\beta$ which imply they are ignoring the prior are an artefact of also fitting $\delta$ and $\gamma$. Output is in `exp3est_betafits_adj.csv`
+
+4. Fit only $\gamma$, and assume that $\beta=1$. The point of this is the opposite of #3. Output is in `exp3est_gammafits_adj.csv`
+
+```{r fitthingsestimated}
+# uncomment this to make it do it on the adjusted dataset
+de3all <- de3all_adj
+
+de3est_long <- de3all %>%
+  filter(condition=="estimated") %>%
+  select(-c(condition,age,gender,botCheck,time,chipsOrder,
+            actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="y")
+de3est_long$x <- as.numeric(str_sub(de3est_long$x,2,10))/100
+
+# the function that fits beta, gamma, and delta
+frestall <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   delta <- ps[3]
+   x <- dpost$x
+   y <- dpost$y
+   pry <- dprior$y
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(delta*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits beta and gamma/delta as one
+fresttwo <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+  dprior <- d %>% filter(section=="prior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   x <- dpost$x
+   y <- dpost$y
+   pry <- dprior$y
+      y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only beta
+frestbeta <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+  dprior <- d %>% filter(section=="prior")
+  gamma <- 1
+   beta <- ps[1]
+   x <- dpost$x
+   y <- dpost$y
+   pry <- dprior$y
+    y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only gamma
+frestgamma <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+  dprior <- d %>% filter(section=="prior")
+   gamma <- ps[1]
+   x <- dpost$x
+   y <- dpost$y
+   pry <- dprior$y
+      y <- y/sum(y)
+   pry <- pry/sum(pry)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- pry
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# fitting delta, gamma, and beta
+ddestall <- de3est_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1,1),frestall,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001,0.0000001),
+                          upper=c(0.9999999,50,50))))
+
+de3est_allfits <- de3all %>% 
+  filter(condition=="estimated") %>% 
+  filter(section=="posterior")
+de3est_allfits$beta <- NA
+de3est_allfits$gamma <- NA
+de3est_allfits$delta <- NA
+de3est_allfits$value <- NA
+
+for (i in 1:nrow(de3est_allfits)) {
+  pid <- ddestall$pID[i]
+  de3est_allfits$beta[de3est_allfits$pID==pid] <-
+    ddestall$fit[[i]]$par[1]
+  de3est_allfits$gamma[de3est_allfits$pID==pid] <-
+    ddestall$fit[[i]]$par[2]
+  de3est_allfits$delta[de3est_allfits$pID==pid] <-
+    ddestall$fit[[i]]$par[3]
+  de3est_allfits$value[de3est_allfits$pID==pid] <-
+    ddestall$fit[[i]]$value[1]
+}
+
+write.csv(de3est_allfits,"datafiles/exp3est_allfits_adj.csv")
+
+# fitting delta/gamma, and beta
+ddesttwo <- de3est_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),fresttwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+de3est_twofits <- de3all %>% 
+  filter(condition=="estimated") %>% 
+  filter(section=="posterior")
+de3est_twofits$beta <- NA
+de3est_twofits$gamma <- NA
+de3est_twofits$value <- NA
+
+for (i in 1:nrow(de3est_twofits)) {
+  pid <- ddesttwo$pID[i]
+  de3est_twofits$beta[de3est_twofits$pID==pid] <-
+    ddesttwo$fit[[i]]$par[1]
+  de3est_twofits$gamma[de3est_twofits$pID==pid] <-
+    ddesttwo$fit[[i]]$par[2]
+  de3est_twofits$value[de3est_twofits$pID==pid] <-
+    ddesttwo$fit[[i]]$value[1]
+}
+
+write.csv(de3est_twofits,"datafiles/exp3est_twofits_adj.csv")
+
+
+# fitting only beta
+ddestbeta <- de3est_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5),frestbeta,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(0.9999999))))
+
+de3est_betafits <- de3all %>% 
+  filter(condition=="estimated") %>% 
+  filter(section=="posterior")
+de3est_betafits$beta <- NA
+de3est_betafits$value <- NA
+
+for (i in 1:nrow(de3est_betafits)) {
+  pid <- ddestbeta$pID[i]
+  de3est_betafits$beta[de3est_betafits$pID==pid] <-
+    ddestbeta$fit[[i]]$par[1]
+  de3est_betafits$value[de3est_betafits$pID==pid] <-
+    ddestbeta$fit[[i]]$value[1]
+}
+
+write.csv(de3est_betafits,"datafiles/exp3est_betafits_adj.csv")
+
+# fitting only gamma
+ddestgamma <- de3est_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),frestgamma,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+de3est_gammafits <- de3all %>% 
+  filter(condition=="estimated") %>% 
+  filter(section=="posterior")
+de3est_gammafits$gamma <- NA
+de3est_gammafits$value <- NA
+
+for (i in 1:nrow(de3est_gammafits)) {
+  pid <- ddestgamma$pID[i]
+  de3est_gammafits$gamma[de3est_gammafits$pID==pid] <-
+    ddestgamma$fit[[i]]$par[1]
+  de3est_gammafits$value[de3est_gammafits$pID==pid] <-
+    ddestgamma$fit[[i]]$value[1]
+}
+
+write.csv(de3est_gammafits,"datafiles/exp3est_gammafits_adj.csv")
+```
+
+Now we're going to do the same thing with the GIVEN data. In this people were given the prior so we fit posteriors assuming that as their prior. As before there are four possibilities.
+
+1. Fit $\beta$, $\gamma$, and $\delta$. Output is in `exp3given_allfits_adj.csv`
+
+2. Fit beta and one variable ($\gamma$) which is the same for $\gamma$ and $\delta$, i.e., it enforces them to be the same. Output is in `exp3given_twofits_adj.csv`
+
+3. Fit only $\beta$, and force $\gamma=\delta=1$. The point of this is to see if the fits we get on $\beta$ which imply they are ignoring the prior are an artefact of also fitting $\delta$ and $\gamma$. Output is in `exp3given_betafits_adj.csv`
+
+4. Fit only $\gamma$, and assume that $\beta=1$. The point of this is the opposite of #3. Output is in `exp3given_gammafits_adj.csv`
+
+
+```{r fitthingsgiven}
+de3given_long <- de3all %>%
+  filter(condition=="given") %>%
+  select(-c(condition,age,gender,botCheck,time,chipsOrder,
+            actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="y")
+de3given_long$x <- as.numeric(str_sub(de3given_long$x,2,10))/100
+
+# the function that fits beta, gamma, and delta
+frgivenall <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   delta <- ps[3]
+   x <- dpost$x
+   y <- dpost$y
+   pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+   y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(delta*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits beta and gamma/delta as one
+frgiventwo <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+   beta <- ps[1]
+   gamma <- ps[2]
+   x <- dpost$x
+   y <- dpost$y
+    pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+      y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only beta
+frgivenbeta <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+  gamma <- 1
+   beta <- ps[1]
+   x <- dpost$x
+   y <- dpost$y
+      pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+    y <- y/sum(y)
+   pry <- pry/sum(pry)
+   uny <- rep(1/11,11)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- (beta*pry+(1-beta)*uny)
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# the function that fits only gamma
+frgivengamma <- function(ps,d) {
+  dpost <- d %>% filter(section=="posterior")
+   gamma <- ps[1]
+   x <- dpost$x
+   y <- dpost$y
+      pry <- c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561)
+      y <- y/sum(y)
+   pry <- pry/sum(pry)
+   likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+   prior <- pry
+   result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+   return(result)
+}
+
+# fitting delta, gamma, and beta
+ddgivenall <- de3given_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1,1),frgivenall,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001,0.0000001),
+                          upper=c(0.9999999,50,50))))
+
+de3given_allfits <- de3all %>% 
+  filter(condition=="given") 
+de3given_allfits$beta <- NA
+de3given_allfits$gamma <- NA
+de3given_allfits$delta <- NA
+de3given_allfits$value <- NA
+
+for (i in 1:nrow(de3given_allfits)) {
+  pid <- ddgivenall$pID[i]
+  de3given_allfits$beta[de3given_allfits$pID==pid] <-
+    ddgivenall$fit[[i]]$par[1]
+  de3given_allfits$gamma[de3given_allfits$pID==pid] <-
+    ddgivenall$fit[[i]]$par[2]
+  de3given_allfits$delta[de3given_allfits$pID==pid] <-
+    ddgivenall$fit[[i]]$par[3]
+  de3given_allfits$value[de3given_allfits$pID==pid] <-
+    ddgivenall$fit[[i]]$value[1]
+}
+
+write.csv(de3given_allfits,"datafiles/exp3given_allfits_adj.csv")
+
+# fitting delta/gamma, and beta
+ddgiventwo <- de3given_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frgiventwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+de3given_twofits <- de3all %>% 
+  filter(condition=="given") 
+de3given_twofits$beta <- NA
+de3given_twofits$gamma <- NA
+de3given_twofits$value <- NA
+
+for (i in 1:nrow(de3given_twofits)) {
+  pid <- ddgiventwo$pID[i]
+  de3given_twofits$beta[de3given_twofits$pID==pid] <-
+    ddgiventwo$fit[[i]]$par[1]
+  de3given_twofits$gamma[de3given_twofits$pID==pid] <-
+    ddgiventwo$fit[[i]]$par[2]
+  de3given_twofits$value[de3given_twofits$pID==pid] <-
+    ddgiventwo$fit[[i]]$value[1]
+}
+
+write.csv(de3given_twofits,"datafiles/exp3given_twofits_adj.csv")
+
+
+# fitting only beta
+ddgivenbeta <- de3given_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5),frgivenbeta,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(0.9999999))))
+
+de3given_betafits <- de3all %>% 
+  filter(condition=="given") 
+de3given_betafits$beta <- NA
+de3given_betafits$value <- NA
+
+for (i in 1:nrow(de3given_betafits)) {
+  pid <- ddgivenbeta$pID[i]
+  de3given_betafits$beta[de3given_betafits$pID==pid] <-
+    ddgivenbeta$fit[[i]]$par[1]
+  de3given_betafits$value[de3given_betafits$pID==pid] <-
+    ddgivenbeta$fit[[i]]$value[1]
+}
+
+write.csv(de3given_betafits,"datafiles/exp3given_betafits_adj.csv")
+
+# fitting only gamma
+ddgivengamma <- de3given_long %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),frgivengamma,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+de3given_gammafits <- de3all %>% 
+  filter(condition=="given") 
+de3given_gammafits$gamma <- NA
+de3given_gammafits$value <- NA
+
+for (i in 1:nrow(de3given_gammafits)) {
+  pid <- ddgivengamma$pID[i]
+  de3given_gammafits$gamma[de3given_gammafits$pID==pid] <-
+    ddgivengamma$fit[[i]]$par[1]
+  de3given_gammafits$value[de3given_gammafits$pID==pid] <-
+    ddgivengamma$fit[[i]]$value[1]
+}
+
+write.csv(de3given_gammafits,"datafiles/exp3given_gammafits_adj.csv")
+```
+
+
+
+## Calculate aggregate best-fit parameters
+
+This contains the code for the aggregate best fits in different ways. First we'll do it just for ESTIMATED, then for GIVEN. It does it for each for all of the four possibilities above. 
+
+```{r fitthingsaggregate}
+# make dataset with aggregate results
+de3est_long <- de3all %>%
+  filter(condition=="estimated") %>%
+  select(-c(condition,age,gender,botCheck,time,chipsOrder,
+            actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="pry")
+de3est_long$x <- as.numeric(str_sub(de3est_long$x,2,10))/100
+
+
+de3est_lsum <- de3est_long %>%
+  group_by(section,x) %>%
+  summarise(y=mean(pry)) %>%
+  ungroup()
+
+write.csv(de3est_lsum,"datafiles/exp3est_aggregate_curves_adj.csv")
+
+# fitting delta, gamma, and beta on estimated
+ddaggall_est <- optim(c(0.5,1,1),frestall,d=de3est_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001,0.0000001),
+                  upper=c(0.9999999,50,50))
+
+# fitting gamma and beta on estimated
+ddaggtwo_est <- optim(c(0.5,1),fresttwo,d=de3est_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001),
+                  upper=c(0.9999999,50))
+
+# fitting beta on estimated
+ddaggbeta_est <- optim(c(0.5),frestbeta,d=de3est_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(0.9999999))
+
+# fitting gamma on estimated
+ddagggamma_est <- optim(c(1),frestgamma,d=de3est_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(50))
+
+# now get given
+de3given_long <- de3all %>%
+  filter(condition=="given") %>%
+  select(-c(condition,age,gender,botCheck,time,chipsOrder,
+            actuallyEstimated)) %>%
+  pivot_longer(cols=c(e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100),
+               names_to="x",values_to="pry")
+de3given_long$x <- as.numeric(str_sub(de3given_long$x,2,10))/100
+
+
+de3given_lsum <- de3given_long %>%
+  group_by(section,x) %>%
+  summarise(y=mean(pry)) %>%
+  ungroup()
+
+# fitting delta, gamma, and beta on estimated
+ddaggall_given <- optim(c(0.5,1,1),frgivenall,d=de3given_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001,0.0000001),
+                  upper=c(0.9999999,50,50))
+
+# fitting gamma and beta on estimated
+ddaggtwo_given <- optim(c(0.5,1),frgiventwo,d=de3given_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001,0.0000001),
+                  upper=c(0.9999999,50))
+
+# fitting beta on estimated
+ddaggbeta_given <- optim(c(0.5),frgivenbeta,d=de3given_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(0.9999999))
+
+# fitting gamma on estimated
+ddagggamma_given <- optim(c(1),frgivengamma,d=de3given_lsum,method="L-BFGS-B",
+                  lower=c(0.0000001),upper=c(50))
+
+write.csv(de3given_lsum,"datafiles/exp3given_aggregate_curves_adj.csv")
+
+
+condition <- c(rep("estimated",4),rep("given",4))
+fitted <- c("all","two","beta","gamma","all","two","beta","gamma")
+beta <- c(ddaggall_est$par[1],ddaggtwo_est$par[1],ddaggbeta_est$par[1],NA,
+          ddaggall_given$par[1],ddaggtwo_given$par[1],ddaggbeta_given$par[1],NA)
+gamma <- c(ddaggall_est$par[2],ddaggtwo_est$par[2],NA,ddagggamma_est$par[1],
+          ddaggall_given$par[2],ddaggtwo_given$par[2],NA,ddagggamma_given$par[1])
+delta <- c(ddaggall_est$par[3],NA,NA,NA,ddaggall_given$par[3],NA,NA,NA)
+value <- c(ddaggall_est$value,ddaggtwo_est$value,ddaggbeta_est$value,
+           ddagggamma_est$value,ddaggall_given$value,ddaggtwo_given$value,
+           ddaggbeta_given$value,ddagggamma_given$value)
+dagg <- tibble(condition,fitted,beta,gamma,delta,value)
+write.csv(dagg,"datafiles/exp3all_aggregate_fits_adj.csv")
+```
