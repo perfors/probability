@@ -170,14 +170,14 @@ d1u_b <- d1u_short %>%
   ggplot(mapping=aes(x=beta,y=infbeta)) +
   geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
   theme_bw() +
-  labs(title = "Exp 1, Unlimited chips: \u03b2 accuracy",
+  labs(title = "Exp 1, Unlimited: \u03b2 accuracy",
        x="Beta",y="Inferred beta")
 
 d1u_g <- d1u_short %>%
   ggplot(mapping=aes(x=gamma,y=infgamma)) +
   geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
   theme_bw() +
-  labs(title = "Exp 1, Unlimited chips: \u03b3 accuracy",
+  labs(title = "Exp 1, Unlimited: \u03b3 accuracy",
        x="Gamma",y="Inferred gamma")
 
 p <- grid.arrange(d1f_b,d1f_g,ncol=2)
