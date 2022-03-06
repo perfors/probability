@@ -290,20 +290,22 @@ pb <- de3_fitall %>%
   labs(title = "Distribution of \u03b2",x="\u03b2",y="# of people")
 
 pg <- de3_fitall %>%
-  ggplot(mapping=aes(x=gamma,fill=condition)) +
-  geom_histogram(alpha=0.7,colour="black",binwidth=2.5,show.legend=FALSE) + 
+  ggplot(mapping=aes(x=log(gamma),fill=condition)) +
+      geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "black") +
   scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) +
   facet_wrap(~condition,ncol=1) +
   theme_bw() +
-  labs(title = "Distribution of \u03b3",x="\u03b3",y="# of people")
+  labs(title = "Distribution of \u03b3",x="log(\u03b3)",y="# of people")
 
 pd <- de3_fitall %>%
-  ggplot(mapping=aes(x=delta,fill=condition)) +
-  geom_histogram(alpha=0.7,colour="black",binwidth=2.5,show.legend=FALSE) + 
+  ggplot(mapping=aes(x=log(delta),fill=condition)) +
+      geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "black") +
   scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
   facet_wrap(~condition,ncol=1) +
   theme_bw() +
-  labs(title = "Distribution of \u03b4",x="\u03b4",y="# of people")
+  labs(title = "Distribution of \u03b4",x="log(\u03b4)",y="# of people")
 
 p <- grid.arrange(pb,pg,pd,ncol=3)
 ggsave("figures/exp3_good_beta_gamma_delta_histograms_adj.png",plot=p,device="png",
@@ -344,12 +346,13 @@ I wanted to see if the $\gamma$ values would be different if we weren't also fit
 
 ```{r histgammafits, echo=FALSE, fig.height=4}
 pgamma <- de3_fitgamma %>%
-  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  ggplot(mapping=aes(x=log(gamma),fill=condition)) +
   geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "black") +
   scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
   facet_wrap(~condition,ncol=1) +
   theme_bw() +
-  labs(title = "Distribution of \u03b3 only",x="\u03b3",y="# of people")
+  labs(title = "Distribution of \u03b3 only",x="log(\u03b3)",y="# of people")
 
 pgamma
 ggsave("figures/exp3_good_gamma_histograms_adj.png",plot=pgamma,device="png",
@@ -376,12 +379,12 @@ $\gamma$: how much they weighted the chips they saw. if $\gamma=1$ it is veridic
 
 ```{r viewdatascattwo, echo=FALSE, fig.height=4}
 p <- de3_fittwo %>%
-  ggplot(mapping=aes(x=beta,y=gamma,colour=condition)) +
+  ggplot(mapping=aes(x=beta,y=log(gamma),colour=condition)) +
   geom_point(alpha=0.6,size=3,show.legend=FALSE) + 
   scale_colour_manual(values = c("mediumpurple4", "mediumpurple3")) + 
   facet_wrap(~condition) +
   theme_bw() +
-  labs(title = "\u03b2 vs \u03b3",x="\u03b2",y="\u03b3")
+  labs(title = "\u03b2 vs \u03b3",x="\u03b2",y="log(\u03b3)")
 
 p
 ggsave("figures/exp3_good_beta_gamma_fitted_values_adj.png",plot=p,device="png",
@@ -414,12 +417,13 @@ pb <- de3_fittwo %>%
   labs(title = "Distribution of \u03b2",x="\u03b2",y="# of people")
 
 pg <- de3_fittwo %>%
-  ggplot(mapping=aes(x=gamma,fill=condition)) +
+  ggplot(mapping=aes(x=log(gamma),fill=condition)) +
   geom_histogram(alpha=0.7,colour="black",binwidth=1,show.legend=FALSE) + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "black") +
   scale_fill_manual(values = c("mediumpurple4", "mediumpurple3")) + 
   facet_wrap(~condition,ncol=1) +
   theme_bw() +
-  labs(title = "Distribution of \u03b3",x="\u03b3",y="# of people")
+  labs(title = "Distribution of \u03b3",x="log(\u03b3)",y="# of people")
 
 p <- grid.arrange(pb,pg,ncol=2)
 ggsave("figures/exp3_good_beta_gamma_histograms_adj.png",plot=p,device="png",
@@ -484,8 +488,8 @@ de3e_long_ps_bad <- de3e_long_bad %>%
 
 p <- de3e_long_ps_bad %>%
   ggplot(mapping=aes(x=x, y=pry)) +
-  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
-  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="darkgray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="darkgray") +
   geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
             colour="black") +
   geom_line(colour="darkred") + 
@@ -529,8 +533,8 @@ de3e_long_ps <- de3e_long %>%
 
 p <- de3e_long_ps %>%
   ggplot(mapping=aes(x=x, y=pry)) +
-  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
-  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="darkgray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="darkgray") +
   geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
             colour="black") +
   geom_line(colour="darkred") + 
@@ -607,8 +611,8 @@ de3g_long_ps_bad <- de3g_long_bad %>%
 
 p <- de3g_long_ps_bad %>%
   ggplot(mapping=aes(x=x, y=pry)) +
-  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
-  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="darkgray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="darkgray") +
   geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
             colour="black") +
   geom_line(colour="darkred") + 
@@ -664,8 +668,8 @@ de3g_long_ps <- de3g_long %>%
 
 p <- de3g_long_ps %>%
   ggplot(mapping=aes(x=x, y=pry)) +
-  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="gray") +
-  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="gray") +
+  #geom_line(mapping=aes(x=x,y=py),linetype="dotted",colour="darkgray") +
+  geom_line(mapping=aes(x=x,y=ppy),linetype="solid",colour="darkgray") +
   geom_line(mapping=aes(x=x,y=ppyb),linetype="dotted",
             colour="black") +
   geom_line(colour="darkred") + 

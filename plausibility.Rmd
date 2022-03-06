@@ -1,0 +1,510 @@
+---
+title: "Plausibility"
+author: "Andrew Perfors"
+output: html_document
+---
+
+The goal of this is to determine whether our approach is plausible. What we do is for each experiment, take the inferred parameters ($\beta$ and $\gamma$) and priors for each person, and use those to generate posteriors. Then give the model the priors and generated posteriors and see if the parameters it identifies are the same as the ones used to generate the posteriors.
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(rminer)
+```
+
+## Experiment 1
+
+The first step is to generate new posteriors for each person given the $\beta$ and $\gamma$ parameters we inferred. We consider the two ones in the Mᴀɪɴ experiment, with either Five or Unlimited chips.
+
+```{r expt1posteriors, echo=FALSE}
+d1f <- read.csv(file=here("datafiles/exp1all_five_twofits_adj.csv")) %>% as_tibble()
+d1u <- read.csv(file=here("datafiles/exp1all_un_twofits_adj.csv")) %>% as_tibble()
+
+d1f_long <- d1f %>%
+  select(pID,beta,gamma,value,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,beta,gamma,value),names_to="x",values_to="prior")
+d1f_long$x <- as.numeric(str_sub(d1f_long$x,2,10))/100
+
+d1u_long <- d1u %>%
+  select(pID,beta,gamma,value,seenRed,seenBlue,
+         e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,beta,gamma,value,seenRed,seenBlue),
+               names_to="x",values_to="prior")
+d1u_long$x <- as.numeric(str_sub(d1u_long$x,2,10))/100
+
+d1f_post <- d1f_long %>%
+  group_by(pID) %>%
+  mutate(pst = (beta*prior+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(genpost = pst/sum(pst)) %>%
+  ungroup()
+d1f_post$pst <- NULL
+
+d1u_post <- d1u_long %>%
+  group_by(pID) %>%
+  mutate(pst = (beta*prior+(1-beta)*rep(1/11,11))*
+           (x^(gamma*seenRed)*(1-x)^(gamma*seenBlue))) %>%
+  mutate(genpost = pst/sum(pst)) %>%
+  ungroup()
+d1u_post$pst <- NULL
+```
+
+Then, for person we want to now infer $\beta$ and $\gamma$ based on their prior and generated posterior.
+
+```{r exp1inferparams, echo=FALSE}
+# the function that fits beta and gamma/delta as one for FIVE condition
+frfivetwo <- function(ps,d) {
+  beta <- ps[1]
+  gamma <- ps[2]
+  x <- d$x
+  y <- d$genpost
+  pry <- d$prior
+  y <- y/sum(y)
+  pry <- pry/sum(pry)
+  uny <- rep(1/11,11)
+  likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+  prior <- (beta*pry+(1-beta)*uny)
+  result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+  return(result)
+}
+
+# the function that fits beta and gamma/delta as one for UNLIMITED condition
+fruntwo <- function(ps,d) {
+  beta <- ps[1]
+  gamma <- ps[2]
+  x <- d$x
+  y <- d$genpost
+  pry <- d$prior
+  y <- y/sum(y)
+  pry <- pry/sum(pry)
+  uny <- rep(1/11,11)
+  nr <- d$seenRed[1]
+  nb <- d$seenBlue[1]
+  likelihood <- x^(gamma*nr)*(1-x)^(gamma*nb)
+  prior <- (beta*pry+(1-beta)*uny)
+  result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+  return(result)
+}
+
+# fitting delta/gamma, and beta for FIVE condition
+d1f_fit <- d1f_post %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frfivetwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+d1f_post$infbeta <- NA
+d1f_post$infgamma <- NA
+d1f_post$infvalue <- NA
+
+for (i in 1:nrow(d1f_fit)) {
+  nid <- d1f_fit$pID[i]
+  d1f_post$infbeta[d1f_post$pID==nid] <-d1f_fit$fit[[i]]$par[1]
+  d1f_post$infgamma[d1f_post$pID==nid] <-d1f_fit$fit[[i]]$par[2]
+  d1f_post$infvalue[d1f_post$pID==nid] <-d1f_fit$fit[[i]]$value[1]
+}
+
+# fitting delta/gamma, and beta for UNLIMITED condition
+d1u_fit <- d1u_post %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),fruntwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+d1u_post$infbeta <- NA
+d1u_post$infgamma <- NA
+d1u_post$infvalue <- NA
+
+for (i in 1:nrow(d1u_fit)) {
+  nid <- d1u_fit$pID[i]
+  d1u_post$infbeta[d1u_post$pID==nid] <- d1u_fit$fit[[i]]$par[1]
+  d1u_post$infgamma[d1u_post$pID==nid] <-d1u_fit$fit[[i]]$par[2]
+  d1u_post$infvalue[d1u_post$pID==nid] <-d1u_fit$fit[[i]]$value[1]
+}
+
+write.csv(d1f_post,"datafiles/exp1_all_five_plausibility.csv")
+write.csv(d1u_post,"datafiles/exp1_all_un_plausibility.csv")
+```
+
+Now we want to see the accuracy of these things.
+
+```{r exp1accuracy, echo=FALSE}
+d1f_post <- d1f_post %>%
+  mutate(berror = abs(beta-infbeta)) %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+d1u_post <- d1u_post %>%
+  mutate(berror = abs(beta-infbeta)) %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+# create short datasets
+d1f_short <- d1f_post %>%
+  filter(x==0.0) %>%
+  select(-c(x,prior,genpost))
+
+d1u_short <- d1u_post %>%
+  filter(x==0.0) %>%
+  select(-c(x,prior,genpost))
+
+d1f_b <- d1f_short %>%
+  ggplot(mapping=aes(x=beta,y=infbeta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
+  theme_bw() +
+  labs(title = "Exp 1, Five chips: \u03b2 accuracy",
+       x="Beta",y="Inferred beta")
+
+d1f_g <- d1f_short %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
+  theme_bw() +
+  labs(title = "Exp 1, Five chips: \u03b3 accuracy",
+       x="Gamma",y="Inferred gamma")
+
+d1u_b <- d1u_short %>%
+  ggplot(mapping=aes(x=beta,y=infbeta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
+  theme_bw() +
+  labs(title = "Exp 1, Unlimited chips: \u03b2 accuracy",
+       x="Beta",y="Inferred beta")
+
+d1u_g <- d1u_short %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
+  theme_bw() +
+  labs(title = "Exp 1, Unlimited chips: \u03b3 accuracy",
+       x="Gamma",y="Inferred gamma")
+
+p <- grid.arrange(d1f_b,d1f_g,ncol=2)
+ggsave("figures/exp1_plausibility_five.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+
+p <- grid.arrange(d1u_b,d1u_g,ncol=2)
+ggsave("figures/exp1_plausibility_un.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+
+# calculating correlations
+d1f_bcor <- cor.test(d1f_short$beta,d1f_short$infbeta)
+d1f_gcor <- cor.test(d1f_short$gamma,d1f_short$infgamma)
+d1u_bcor <- cor.test(d1u_short$beta,d1u_short$infbeta)
+d1u_gcor <- cor.test(d1u_short$gamma,d1u_short$infgamma)
+```
+
+For Five chips, `r round(100*sum(d1f_short$berror<0.1)/nrow(d1f_short),1)`% of the inferred beta were less than 0.1 off the original $\beta$ (participant ids were `r d1f_short$pID[d1f_short$berror>=0.1]`). The correlation of $\beta$ to inferred $\beta$ was r=`r round(d1f_bcor$estimate[[1]],5)`, p=`r round(d1f_bcor$p.value[1],3)`.
+
+Also, `r round(100*sum(d1f_short$gerror<0.1)/nrow(d1f_short),1)`% of the inferred $\gamma$ were less than 0.1 off (participant ids were `r d1f_short$pID[d1f_short$gerror>=0.1]`). The correlation of $\gamma$ to inferred $\gamma$ was r=`r round(d1f_gcor$estimate[[1]],5)`, p=`r round(d1f_gcor$p.value[1],3)`.
+
+For Unlimited chips, `r round(100*sum(d1u_short$berror<0.1)/nrow(d1u_short),1)`% of the inferred beta were less than 0.1 off the original $\beta$ (participant ids were `r d1u_short$pID[d1u_short$berror>=0.1]`). The correlation of $\beta$ to inferred $\beta$ was r=`r round(d1u_bcor$estimate[[1]],5)`, p=`r round(d1u_bcor$p.value[1],3)`.
+
+Also, `r round(100*sum(d1u_short$gerror<0.1)/nrow(d1u_short),1)`% of the inferred $\gamma$ were less than 0.1 off (participant ids were `r d1u_short$pID[d1u_short$gerror>=0.1]`). The correlation of $\gamma$ to inferred $\gamma$ was r=`r round(d1u_gcor$estimate[[1]],5)`, p=`r round(d1u_gcor$p.value[1],3)`.
+
+
+## Experiment 2
+
+The first step is to generate new posteriors for each person given the $\beta$ and $\gamma$ parameters we inferred. There were two conditions, Pᴇᴀᴋᴇᴅ and Uɴɪғᴏʀᴍ
+
+```{r expt2posteriors, echo=FALSE}
+d2p <- read.csv(file=here("datafiles/exp2_peaked_twofits_adj.csv")) %>% as_tibble()
+d2u <- read.csv(file=here("datafiles/exp2_uniform_twofits_adj.csv")) %>%
+  as_tibble()
+
+d2p_long <- d2p %>%
+  select(pID,beta,gamma,value,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,beta,gamma,value),names_to="x",values_to="prior")
+d2p_long$x <- as.numeric(str_sub(d2p_long$x,2,10))/100
+
+d2u_long <- d2u %>%
+  select(pID,gamma,value,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,gamma,value),
+               names_to="x",values_to="prior")
+d2u_long$x <- as.numeric(str_sub(d2u_long$x,2,10))/100
+
+d2p_post <- d2p_long %>%
+  group_by(pID) %>%
+  mutate(pst = (beta*prior+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(genpost = pst/sum(pst)) %>%
+  ungroup()
+d2p_post$pst <- NULL
+
+d2u_post <- d2u_long %>%
+  group_by(pID) %>%
+  mutate(pst = (rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^(gamma*1))) %>%
+  mutate(genpost = pst/sum(pst)) %>%
+  ungroup()
+d2u_post$pst <- NULL
+```
+
+Then, for each person we want to now infer $\beta$ and $\gamma$ based on their prior and generated posterior. (For the Uniform condition we only infer $\gamma$).
+
+```{r exp2inferparams, echo=FALSE}
+# the function that fits gamma for the uniform condition
+frgammaonly <- function(ps,d) {
+  gamma <- ps[1]
+  x <- d$x
+  y <- d$genpost
+  pry <- d$prior
+  y <- y/sum(y)
+  pry <- pry/sum(pry)
+  likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+  prior <- rep(1/11,11)
+  result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+  return(result)
+}
+
+
+# fitting delta/gamma, and beta for PEAKED condition
+d2p_fit <- d2p_post %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frfivetwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+d2p_post$infbeta <- NA
+d2p_post$infgamma <- NA
+d2p_post$infvalue <- NA
+
+for (i in 1:nrow(d2p_fit)) {
+  nid <- d2p_fit$pID[i]
+  d2p_post$infbeta[d2p_post$pID==nid] <-d2p_fit$fit[[i]]$par[1]
+  d2p_post$infgamma[d2p_post$pID==nid] <-d2p_fit$fit[[i]]$par[2]
+  d2p_post$infvalue[d2p_post$pID==nid] <-d2p_fit$fit[[i]]$value[1]
+}
+
+# fitting gamma for UNIFORM condition
+d2u_fit <- d2u_post %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(1),frgammaonly,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001),
+                          upper=c(50))))
+
+d2u_post$infgamma <- NA
+d2u_post$infvalue <- NA
+
+for (i in 1:nrow(d2u_fit)) {
+  nid <- d2u_fit$pID[i]
+  d2u_post$infgamma[d2u_post$pID==nid] <-d2u_fit$fit[[i]]$par[1]
+  d2u_post$infvalue[d2u_post$pID==nid] <-d2u_fit$fit[[i]]$value[1]
+}
+
+write.csv(d2p_post,"datafiles/exp2_peaked_plausibility.csv")
+write.csv(d2u_post,"datafiles/exp2_uniform_plausibility.csv")
+```
+
+Now we want to see the accuracy of these things.
+
+```{r exp2accuracy, echo=FALSE}
+d2p_post <- d2p_post %>%
+  mutate(berror = abs(beta-infbeta)) %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+d2u_post <- d2u_post %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+# create short datasets
+d2p_short <- d2p_post %>%
+  filter(x==0.0) %>%
+  select(-c(x,prior,genpost))
+
+d2u_short <- d2u_post %>%
+  filter(x==0.0) %>%
+  select(-c(x,prior,genpost))
+
+d2p_b <- d2p_short %>%
+  ggplot(mapping=aes(x=beta,y=infbeta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
+  theme_bw() +
+  labs(title = "Exp 2, Pᴇᴀᴋᴇᴅ: \u03b2 accuracy",
+       x="Beta",y="Inferred beta")
+
+d2p_g <- d2p_short %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
+  theme_bw() +
+  labs(title = "Exp 2, Pᴇᴀᴋᴇᴅ: \u03b3 accuracy",
+       x="Gamma",y="Inferred gamma")
+
+d2u_g <- d2u_short %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
+  theme_bw() +
+  labs(title = "Exp 2, Uɴɪғᴏʀᴍ: \u03b3 accuracy",
+       x="Gamma",y="Inferred gamma")
+
+p <- grid.arrange(d2p_b,d2p_g,ncol=2)
+ggsave("figures/exp2_plausibility_peaked.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+
+p <- grid.arrange(d2u_g,ncol=1)
+ggsave("figures/exp2_plausibility_uniform.png",plot=p,device="png",
+       width=8,height=6, units="cm")
+
+# calculating correlations
+d2p_bcor <- cor.test(d2p_short$beta,d2p_short$infbeta)
+d2p_gcor <- cor.test(d2p_short$gamma,d2p_short$infgamma)
+d2u_gcor <- cor.test(d2u_short$gamma,d2u_short$infgamma)
+```
+
+
+For Pᴇᴀᴋᴇᴅ, `r round(100*sum(d2p_short$berror<0.1)/nrow(d2p_short),1)`% of the inferred beta were less than 0.1 off the original $\beta$ (participant ids were `r d2p_short$pID[d2p_short$berror>=0.1]`). The correlation of $\beta$ to inferred $\beta$ was r=`r round(d2p_bcor$estimate[[1]],5)`, p=`r round(d2p_bcor$p.value[1],3)`.
+
+Also, `r round(100*sum(d2p_short$gerror<0.1)/nrow(d2p_short),1)`% of the inferred $\gamma$ were less than 0.1 off (participant ids were `r d2p_short$pID[d2p_short$gerror>=0.1]`). The correlation of $\gamma$ to inferred $\gamma$ was r=`r round(d2p_gcor$estimate[[1]],5)`, p=`r round(d2p_gcor$p.value[1],3)`.
+
+For Uɴɪғᴏʀᴍ, `r round(100*sum(d2u_short$gerror<0.1)/nrow(d2u_short),1)`% of the inferred gamma were less than 0.1 off the original gamma (participant ids were `r d2u_short$pID[d2u_short$gerror>=0.1]`). The correlation of $\gamma$ to inferred $\gamma$ was r=`r round(d2u_gcor$estimate[[1]],5)`, p=`r round(d2u_gcor$p.value[1],3)`.
+
+## Experiment 3
+
+The first step is to generate new posteriors for each person given the $\beta$ and $\gamma$ parameters we inferred. There were two conditions, Esᴛɪᴍᴀᴛᴇᴅ and Gɪᴠᴇɴ
+
+```{r expt3posteriors, echo=FALSE}
+d3e <- read.csv(file=here("datafiles/exp3est_twofits_adj.csv")) %>% as_tibble()
+d3g <- read.csv(file=here("datafiles/exp3given_twofits_adj.csv")) %>% as_tibble()
+
+d3e_long <- d3e %>%
+  select(pID,beta,gamma,value,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,beta,gamma,value),names_to="x",values_to="prior")
+d3e_long$x <- as.numeric(str_sub(d3e_long$x,2,10))/100
+
+d3g_long <- d3g %>%
+  select(pID,beta,gamma,value,e0,e10,e20,e30,e40,e50,e60,e70,e80,e90,e100) %>%
+  pivot_longer(cols=-c(pID,beta,gamma,value),
+               names_to="x",values_to="prior")
+d3g_long$x <- as.numeric(str_sub(d3g_long$x,2,10))/100
+
+d3e_post <- d3e_long %>%
+  group_by(pID) %>%
+  mutate(pst = (beta*prior+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(genpost = pst/sum(pst)) %>%
+  ungroup()
+d3e_post$pst <- NULL
+
+d3g_post <- d3g_long %>%
+  group_by(pID) %>%
+  mutate(pst = (beta*prior+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(genpost = pst/sum(pst)) %>%
+  ungroup()
+d3g_post$pst <- NULL
+```
+
+Then, for each person we want to now infer $\beta$ and $\gamma$ based on their prior and generated posterior. 
+
+```{r exp3inferparams, echo=FALSE}
+
+# fitting delta/gamma, and beta for ESTIMATED condition
+d3e_fit <- d3e_post %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frfivetwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+d3e_post$infbeta <- NA
+d3e_post$infgamma <- NA
+d3e_post$infvalue <- NA
+
+for (i in 1:nrow(d3e_fit)) {
+  nid <- d3e_fit$pID[i]
+  d3e_post$infbeta[d3e_post$pID==nid] <-d3e_fit$fit[[i]]$par[1]
+  d3e_post$infgamma[d3e_post$pID==nid] <-d3e_fit$fit[[i]]$par[2]
+  d3e_post$infvalue[d3e_post$pID==nid] <-d3e_fit$fit[[i]]$value[1]
+}
+
+# fitting delta/gamma, and beta for GIVEN condition
+d3g_fit <- d3g_post %>% 
+  nest_by(pID) %>% 
+  mutate(fit = list(optim(c(0.5,1),frfivetwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+d3g_post$infbeta <- NA
+d3g_post$infgamma <- NA
+d3g_post$infvalue <- NA
+
+for (i in 1:nrow(d3g_fit)) {
+  nid <- d3g_fit$pID[i]
+  d3g_post$infbeta[d3g_post$pID==nid] <-d3g_fit$fit[[i]]$par[1]
+  d3g_post$infgamma[d3g_post$pID==nid] <-d3g_fit$fit[[i]]$par[2]
+  d3g_post$infvalue[d3g_post$pID==nid] <-d3g_fit$fit[[i]]$value[1]
+}
+
+write.csv(d3e_post,"datafiles/exp3_estimated_plausibility.csv")
+write.csv(d3g_post,"datafiles/exp3_given_plausibility.csv")
+```
+
+Now we want to see the accuracy of these things.
+
+```{r exp3accuracy, echo=FALSE}
+d3e_post <- d3e_post %>%
+  mutate(berror = abs(beta-infbeta)) %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+d3g_post <- d3g_post %>%
+  mutate(berror = abs(beta-infbeta)) %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+# create short datasets
+d3e_short <- d3e_post %>%
+  filter(x==0.0) %>%
+  select(-c(x,prior,genpost))
+
+d3g_short <- d3g_post %>%
+  filter(x==0.0) %>%
+  select(-c(x,prior,genpost))
+
+d3e_b <- d3e_short %>%
+  ggplot(mapping=aes(x=beta,y=infbeta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
+  theme_bw() +
+  labs(title = "Exp 3, Esᴛɪᴍᴀᴛᴇᴅ: \u03b2 accuracy",
+       x="Beta",y="Inferred beta")
+
+d3e_g <- d3e_short %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
+  theme_bw() +
+  labs(title = "Exp 3, Esᴛɪᴍᴀᴛᴇᴅ: \u03b3 accuracy",
+       x="Gamma",y="Inferred gamma")
+
+d3g_b <- d3g_short %>%
+  ggplot(mapping=aes(x=beta,y=infbeta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
+  theme_bw() +
+  labs(title = "Exp 3, Gɪᴠᴇɴ: \u03b2 accuracy",
+       x="Beta",y="Inferred beta")
+
+d3g_g <- d3g_short %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.5,size=2) +
+  theme_bw() +
+  labs(title = "Exp 3, Gɪᴠᴇɴ: \u03b3 accuracy",
+       x="Gamma",y="Inferred gamma")
+
+p <- grid.arrange(d3e_b,d3e_g,ncol=2)
+ggsave("figures/exp3_plausibility_estimated.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+
+p <- grid.arrange(d3g_b,d3g_g,ncol=2)
+ggsave("figures/exp3_plausibility_given.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+
+# calculating correlations
+d3e_bcor <- cor.test(d3e_short$beta,d3e_short$infbeta)
+d3e_gcor <- cor.test(d3e_short$gamma,d3e_short$infgamma)
+d3g_bcor <- cor.test(d3g_short$beta,d3g_short$infbeta)
+d3g_gcor <- cor.test(d3g_short$gamma,d3g_short$infgamma)
+```
+
+For Esᴛɪᴍᴀᴛᴇᴅ, `r round(100*sum(d3e_short$berror<0.1)/nrow(d3e_short),1)`% of the inferred beta were less than 0.1 off the original $\beta$ (participant ids were `r d3e_short$pID[d3e_short$berror>=0.1]`). The correlation of $\beta$ to inferred $\beta$ was r=`r round(d3e_bcor$estimate[[1]],5)`, p=`r round(d3e_bcor$p.value[1],3)`.
+
+Also, `r round(100*sum(d3e_short$gerror<0.1)/nrow(d3e_short),1)`% of the inferred $\gamma$ were less than 0.1 off (participant ids were `r d3e_short$pID[d3e_short$gerror>=0.1]`). The correlation of $\gamma$ to inferred $\gamma$ was r=`r round(d3e_gcor$estimate[[1]],5)`, p=`r round(d3e_gcor$p.value[1],3)`.
+
+For Gɪᴠᴇɴ, `r round(100*sum(d3g_short$berror<0.1)/nrow(d3g_short),1)`% of the inferred beta were less than 0.1 off the original $\beta$ (participant ids were `r d3g_short$pID[d3g_short$berror>=0.1]`). The correlation of $\beta$ to inferred $\beta$ was r=`r round(d3g_bcor$estimate[[1]],5)`, p=`r round(d3g_bcor$p.value[1],3)`.
+
+Also, `r round(100*sum(d3g_short$gerror<0.1)/nrow(d3g_short),1)`% of the inferred $\gamma$ were less than 0.1 off (participant ids were `r d3g_short$pID[d3g_short$gerror>=0.1]`). The correlation of $\gamma$ to inferred $\gamma$ was r=`r round(d3g_gcor$estimate[[1]],5)`, p=`r round(d3g_gcor$p.value[1],3)`.

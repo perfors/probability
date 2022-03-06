@@ -1,0 +1,298 @@
+---
+title: "Robustness"
+author: "Andrew Perfors"
+output: html_document
+---
+
+The goal of this is to determine when and to what extent true model parameters can be recovered for simulated posteriors when using different starting values.
+
+```{r setup, include=FALSE}
+# We'll begin by loading up the libraries and data we need, as always.
+knitr::opts_chunk$set(echo = TRUE)
+
+# loading the libraries
+library(tidyverse)
+library(here)
+library(ggplot2)
+library(gridExtra)
+library(rminer)
+```
+
+## What can we vary?
+
+Considering the analyses in the main paper, there are four things we can vary in our "ground truth" dataset: the reported prior, the likelihood (i.e., after five chips or unlimited chips), $\beta$, and $\gamma$. (We could also vary $\delta$ but in an effort to keep things simpler and since that was only a secondary analysis in the supplemental materials we will not do that yet.)
+
+```{r setpriordists, echo=FALSE}
+a <- c(0.01,0.1,1,1.5,4,8,15,0.2,2,20)
+b <- c(0.01,0.1,1,1.5,4,8,15,1,10,100)
+simParams <- tibble(a,b)
+x <- c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1)
+npr <- nrow(simParams)
+simParams$n <- 1:npr
+
+n <- NULL
+prior <- NULL
+a <- NULL
+b <- NULL
+sims <- NULL
+for (i in 1:npr) {
+  pr <- dbeta(x,simParams$a[i],simParams$b[i])
+  pr[is.infinite(pr)] <- 1
+  if (i==4) {
+    pr <- pr+0.6
+    pr[5] <- pr[5]+0.3
+    pr[6] <- pr[6]+0.5
+    pr[7] <- pr[7]+0.3
+  } else {
+    pr <- pr+0.0001
+  }
+  pr <- pr/sum(pr)
+  n <- c(n,rep(simParams$n[i],11))
+  a <- c(a,rep(simParams$a[i],11))
+  b <- c(b,rep(simParams$b[i],11))
+  prior <- c(prior,pr)
+}
+# Add Experiment 2 and Experiment 3 priors
+prior <- c(prior,c(0,0,0,0,0,0.08,0.08,0.2,0.6,0.04,0),
+           c(0.043561,0.049242,0.064394,0.104167,0.132576,0.212121,
+            0.132576,0.104167,0.064394,0.049242,0.043561))
+a <- c(a,rep(NA,22))
+b <- c(b,rep(NA,22))
+n <- c(n,rep(npr+1,11),rep(npr+2,11))
+
+npr <- npr+2
+simDists <- tibble(n,a,b,prior)
+simDists$x <- rep(x,npr)
+
+p <- simDists %>%
+  ggplot(mapping=aes(x=x,y=prior)) +
+  geom_line(colour="darkred") + 
+  facet_wrap(n,nrow=3) +
+  theme_bw() +
+  theme(axis.text.x=element_blank(),
+        axis.ticks=element_blank(),
+        axis.text.y=element_blank()) +
+  labs(title = "Robustness: Prior distributions",x="Proportion of red",y="Probability")
+
+p
+ggsave("figures/robust_priors.png",plot=p,device="png",
+       width=8,height=10, units="cm")
+
+```
+
+Then, for each prior we want to explore the range of possible $\beta$ and $\gamma$ values and what that means for the posterior.
+
+```{r explorerange, echo=FALSE}
+simDists$x <- 10*simDists$x
+sd <- simDists %>% 
+  pivot_wider(names_from=x,values_from=prior)
+sd <- rbind(sd,sd,sd,sd,sd,sd,sd,sd,sd)
+sd <- rbind(sd,sd,sd,sd,sd,sd,sd,sd,sd,sd)
+
+sd$gamma <- rep(c(rep(0.01,npr),rep(0.1,npr),rep(0.5,npr),rep(1,npr),
+                  rep(5,npr),rep(10,npr),rep(20,npr),rep(30,npr),
+                  rep(40,npr),rep(50,npr)),9)
+#sd$gamma <- rep(c(rep(0.01,npr),rep(0.1,npr),rep(0.25,npr),rep(0.5,npr),
+#                  rep(0.75,npr),rep(1,npr),rep(5,npr),rep(10,npr),
+#                  rep(20,npr),rep(50,npr)),9)
+sd$beta <- rep(c(rep(0.001,npr*10),rep(0.01,npr*10),rep(0.1,npr*10),
+                 rep(0.25,npr*10),rep(0.5,npr*10),rep(0.75,npr*10),
+                 rep(0.9,npr*10),rep(0.99,npr*10),rep(0.999,npr*10)))
+sd$name <- str_c('b',sd$beta,'g',sd$gamma)
+sd <- sd %>% arrange(n)
+sd$subn <- rep(1:90,npr)
+sd$id <- 1:nrow(sd)
+
+sd <- sd %>%
+  pivot_longer(cols=-c(id,n,subn,name,gamma,beta,a,b),
+               names_to="x",values_to="prior")
+sd$x <- as.numeric(sd$x)/10
+
+sd_pos <- sd %>%
+  group_by(n,gamma,beta) %>%
+  mutate(pst = (beta*prior+(1-beta)*rep(1/11,11))*
+           (x^(gamma*4)*(1-x)^gamma)) %>%
+  mutate(posterior = pst/sum(pst)) %>%
+  ungroup()
+sd_pos$pst <- NULL
+sd_pos$name <- NULL
+
+```
+
+
+```{r showpriors, echo=FALSE, eval=FALSE}
+# First let's just plot what the posteriors look like for each $\gamma$ and $\beta$ for each prior.
+
+for (i in 1:npr) {
+  s <- paste0('Prior #',i,', varying gamma and beta')
+  sd_pos %>%
+    filter(n==i) %>%
+    ggplot(mapping=aes(x=x, y=prior)) +
+    geom_line(mapping=aes(x=x,y=posterior),colour="dodgerblue4") +
+    geom_line(colour="darkred") +
+    facet_grid(gamma~beta) +
+    theme_bw() +
+    labs(title = s)
+}
+```
+
+Now we want to calculate the inferred gamma and beta for each of the n. 
+
+```{r calculateinferredgammabeta, echo=FALSE}
+
+# the function that fits beta and gamma/delta as one
+frfivetwo <- function(ps,d) {
+  beta <- ps[1]
+  gamma <- ps[2]
+  x <- d$x
+  y <- d$posterior
+  pry <- d$prior
+  y <- y/sum(y)
+  pry <- pry/sum(pry)
+  uny <- rep(1/11,11)
+  likelihood <- x^(gamma*4)*(1-x)^(gamma*1)
+  prior <- (beta*pry+(1-beta)*uny)
+  result <- sum((y - (likelihood*prior)/sum(likelihood*prior))^2)
+  return(result)
+}
+
+# fitting delta/gamma, and beta
+sd_fit <- sd_pos %>% 
+  nest_by(id) %>% 
+  mutate(fit = list(optim(c(0.5,1),frfivetwo,d=data,method="L-BFGS-B",
+                          lower=c(0.0000001,0.0000001),
+                          upper=c(0.9999999,50))))
+
+sd_pos$infbeta <- NA
+sd_pos$infgamma <- NA
+sd_pos$value <- NA
+
+for (i in 1:nrow(sd_fit)) {
+  nid <- sd_fit$id[i]
+  sd_pos$infbeta[sd_pos$id==nid] <-sd_fit$fit[[i]]$par[1]
+  sd_pos$infgamma[sd_pos$id==nid] <-sd_fit$fit[[i]]$par[2]
+  sd_pos$value[sd_pos$id==nid] <-sd_fit$fit[[i]]$value[1]
+}
+
+write.csv(sd_pos,"datafiles/robustnesscheck.csv")
+```
+
+Now we want to see the accuracy of these things.
+
+```{r plotvalues, echo=FALSE}
+sd_pos <- sd_pos %>%
+  filter(x==0.0) %>%
+  mutate(berror = abs(beta-infbeta)) %>%
+  mutate(gerror = abs(gamma-infgamma))
+
+baccuracy <- length(sd_pos$id[sd_pos$berror < 0.1])/length(sd_pos$id)
+gaccuracy <- length(sd_pos$id[sd_pos$gerror < 0.1])/length(sd_pos$id)
+
+accb <- sd_pos %>%
+  ggplot(mapping=aes(x=beta,y=infbeta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
+  scale_x_continuous(breaks = c(0,0.5,1)) +
+  scale_y_continuous(breaks = c(0,0.5,1)) +
+  facet_wrap(~n) +
+  theme_bw() +
+  labs(title = "Accuracy of inferred \u03b2 values",
+       x="Beta",y="Inferred beta")
+
+accg <- sd_pos %>%
+  ggplot(mapping=aes(x=gamma,y=infgamma)) +
+  geom_jitter(alpha=0.5,colour="blue",width=1) +
+  scale_x_continuous(breaks = c(0,20,40)) +
+  scale_y_continuous(breaks = c(0,20,40)) +
+  facet_wrap(~n) +
+  theme_bw() +
+  labs(title = "Accuracy of inferred \u03b3 values",
+       x="Gamma",y="Inferred gamma")
+
+p <- grid.arrange(accb,accg,ncol=2)
+ggsave("figures/robust_accuracy.png",plot=p,device="png",
+       width=16,height=10, units="cm")
+
+errb <- sd_pos %>%
+  ggplot(mapping=aes(x=berror)) +
+  geom_histogram(fill="lightblue",colour="black",binwidth=0.1) +
+  theme_bw() +
+  labs(title = "Error size for inferred \u03b2",
+       x="Error size",y="Number")
+
+errg <- sd_pos %>%
+  ggplot(mapping=aes(x=gerror)) +
+  geom_histogram(fill="lightblue",colour="black",binwidth=1) +
+  theme_bw() +
+  labs(title = "Error size for inferred \u03b3",
+       x="Error size",y="Number")
+
+p <- grid.arrange(errb,errg,ncol=2)
+ggsave("figures/robust_errorhists.png",plot=p,device="png",
+       width=16,height=6, units="cm")
+```
+
+`r round(baccuracy,2)` of the inferred beta were within 0.1 of it, and `r round(gaccuracy,2)` of the inferred gamma were.
+
+The main question at this point is where we are getting the poor accuracy for the $\beta$ values -- for what kind of distributions and original beta/gamma value combinations is this?
+
+```{r lookatbad, echo=FALSE}
+# since beta is the one that is so inaccurate, let's just look at it first
+
+psbhi <- sd_pos %>%
+  filter(berror>0.1) %>%
+  ggplot(mapping=aes(x=gamma,y=beta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=1,size=2) +
+  scale_x_continuous(breaks = c(0,20,40)) +
+  facet_wrap(~n) +
+  theme_bw() +
+  labs(title = "\u03b2 error over 0.1",
+       x="Gamma",y="Beta")
+
+
+psblo <- sd_pos %>%
+  filter(berror<0.1) %>%
+  ggplot(mapping=aes(x=gamma,y=beta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=1,size=2) +
+  scale_x_continuous(breaks = c(0, 20,40)) +
+  facet_wrap(~n) +
+  theme_bw() +
+  labs(title = "\u03b2 error below 0.1",
+       x="Gamma",y="Beta")
+
+psghi <- sd_pos %>%
+  filter(gerror>0.1) %>%
+  ggplot(mapping=aes(x=gamma,y=beta)) +
+  geom_jitter(alpha=0.5,colour="blue",width=1,size=2) +
+  scale_x_continuous(breaks = c(0, 20,40)) +
+  facet_wrap(~n) +
+  theme_bw() +
+  labs(title = "\u03b3 error over 0.1",
+       x="Gamma",y="Beta")
+
+
+psglo <- sd_pos %>%
+  filter(gerror<0.1) %>%
+  ggplot(mapping=aes(x=gamma,y=beta)) +
+  geom_jitter(alpha=0.1,colour="blue",width=1) +
+  scale_x_continuous(breaks = c(0, 20,40)) +
+  facet_wrap(~n) +
+  theme_bw() +
+  labs(title = "\u03b3 error below 0.1",
+       x="Gamma",y="Beta")
+
+p <- grid.arrange(psbhi,psghi,ncol=2)
+ggsave("figures/robust_ps_hi.png",plot=p,device="png",
+       width=16,height=10, units="cm")
+
+p <- grid.arrange(psblo,psglo,ncol=2)
+ggsave("figures/robust_ps_low.png",plot=p,device="png",
+       width=16,height=10, units="cm")
+
+# try to create heatmaps
+# fuck it, never mind
+#sd_pos %>%
+#  ggplot(mapping=aes(x=gamma,y=beta)) +
+#  geom_raster(aes(fill=berror))
+##  geom_tile(aes(fill = berror),binwidth = c(10,0.25))
+
+```
