@@ -67,7 +67,7 @@ simDists$x <- rep(x,npr)
 p <- simDists %>%
   ggplot(mapping=aes(x=x,y=prior)) +
   geom_line(colour="darkred") + 
-  facet_wrap(n,nrow=3) +
+  facet_wrap(n,nrow=4) +
   theme_bw() +
   theme(axis.text.x=element_blank(),
         axis.ticks=element_blank(),
@@ -193,7 +193,7 @@ accb <- sd_pos %>%
   geom_jitter(alpha=0.5,colour="blue",width=0.01,size=2) +
   scale_x_continuous(breaks = c(0,0.5,1)) +
   scale_y_continuous(breaks = c(0,0.5,1)) +
-  facet_wrap(~n) +
+  facet_wrap(~n,nrow=4) +
   theme_bw() +
   labs(title = "Accuracy of inferred \u03b2 values",
        x="Beta",y="Inferred beta")
@@ -203,7 +203,7 @@ accg <- sd_pos %>%
   geom_jitter(alpha=0.5,colour="blue",width=1) +
   scale_x_continuous(breaks = c(0,20,40)) +
   scale_y_continuous(breaks = c(0,20,40)) +
-  facet_wrap(~n) +
+  facet_wrap(~n,nrow=4) +
   theme_bw() +
   labs(title = "Accuracy of inferred \u03b3 values",
        x="Gamma",y="Inferred gamma")
@@ -243,7 +243,7 @@ psbhi <- sd_pos %>%
   ggplot(mapping=aes(x=gamma,y=beta)) +
   geom_jitter(alpha=0.5,colour="blue",width=1,size=2) +
   scale_x_continuous(breaks = c(0,20,40)) +
-  facet_wrap(~n) +
+  facet_wrap(~n,nrow=4,drop=FALSE) +
   theme_bw() +
   labs(title = "\u03b2 error over 0.1",
        x="Gamma",y="Beta")
@@ -254,7 +254,7 @@ psblo <- sd_pos %>%
   ggplot(mapping=aes(x=gamma,y=beta)) +
   geom_jitter(alpha=0.5,colour="blue",width=1,size=2) +
   scale_x_continuous(breaks = c(0, 20,40)) +
-  facet_wrap(~n) +
+  facet_wrap(~n,nrow=4,drop=FALSE) +
   theme_bw() +
   labs(title = "\u03b2 error below 0.1",
        x="Gamma",y="Beta")
@@ -264,7 +264,7 @@ psghi <- sd_pos %>%
   ggplot(mapping=aes(x=gamma,y=beta)) +
   geom_jitter(alpha=0.5,colour="blue",width=1,size=2) +
   scale_x_continuous(breaks = c(0, 20,40)) +
-  facet_wrap(~n) +
+  facet_wrap(~n,drop=FALSE,nrow=4) +
   theme_bw() +
   labs(title = "\u03b3 error over 0.1",
        x="Gamma",y="Beta")
@@ -273,9 +273,9 @@ psghi <- sd_pos %>%
 psglo <- sd_pos %>%
   filter(gerror<0.1) %>%
   ggplot(mapping=aes(x=gamma,y=beta)) +
-  geom_jitter(alpha=0.1,colour="blue",width=1) +
+  geom_jitter(alpha=0.5,colour="blue",width=1) +
   scale_x_continuous(breaks = c(0, 20,40)) +
-  facet_wrap(~n) +
+  facet_wrap(~n,nrow=4,drop=FALSE) +
   theme_bw() +
   labs(title = "\u03b3 error below 0.1",
        x="Gamma",y="Beta")
